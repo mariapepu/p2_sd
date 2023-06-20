@@ -117,77 +117,29 @@ export default {
   data () {
     return {
       message: 'Sport Matches',
+      user: this.username,
       tickets_bought: 0,
+      remaining_tickets: 15,
+      money_available: 100,
+      price_match: 10,
       is_showing_cart: false,
       matches_added: [],
+      matches: [],
+      creatingAccount: false,
+      is_admin: false,
+      totalTickets: 0,
       cardImages: [
         'https://media.istockphoto.com/id/626535710/es/foto/jugador-de-voleibol-de-la-escuela-secundaria-asi%C3%A1tica-dispara-voleibol-contra-oponentes.jpg?s=612x612&w=0&k=20&c=Zt90sNrGqg_2utf3CDdF4sddEEM2sQ76a2Vwzqt-z6I=',
         'https://5corunafs.com/web2022/wp-content/uploads/2021/01/SAVE_20210121_074852-1-768x552.jpg',
         'https://5corunafs.com/web2022/wp-content/uploads/2021/01/SAVE_20210121_074852-1-768x552.jpg'
         // Agrega más URLs de imágenes según sea necesario
-      ],
-      matches: [
-        {
-          'id': 1,
-          'local': {
-            'id': 3,
-            'name': 'Club Juventut Les Corts',
-            'country': 'Spain'
-          },
-          'visitor': {
-            'id': 2,
-            'name': 'CE Sabadell',
-            'country': 'Spain'
-          },
-          'competition': {
-            'name': 'Women\'s European Championship',
-            'category': 'Senior',
-            'sport': 'Volleyball'
-          },
-          'date': '2022-10-12T00:00:00',
-          'price': 4.3
-        },
-        {
-          'id': 2,
-          'local': {
-            'id': 3,
-            'name': 'Club Juventut Les Corts',
-            'country': 'Spain'
-          },
-          'visitor': {
-            'id': 2,
-            'name': 'CE Sabadell',
-            'country': 'Spain'
-          },
-          'competition': {
-            'name': '1st Division League',
-            'category': 'Junior',
-            'sport': 'Futsal'
-          },
-          'date': '2022-07-10T00:00:00',
-          'price': 129.29
-        },
-        {
-          'id': 3,
-          'local': {
-            'id': 1,
-            'name': 'CV Vall D\'Hebron',
-            'country': 'Spain'
-          },
-          'visitor': {
-            'id': 4,
-            'name': 'Volei Rubi',
-            'country': 'Spain'
-          },
-          'competition': {
-            'name': '1st Division League',
-            'category': 'Junior',
-            'sport': 'Futsal'
-          },
-          'date': '2022-08-10T00:00:00',
-          'price': 111.1
-        }
       ]
+    }
+  },
+  computed: {
+    // eslint-disable-next-line vue/no-dupe-keys
+    totalTickets () {
+      return this.matches_added.reduce((total, match) => total + match.ticketCount, 0)
     }
   },
   methods: {
@@ -218,23 +170,24 @@ export default {
     },
     getMatches () {
       const pathMatches = 'http://localhost:8000/matches/'
-      const pathCompetition = 'http://localhost:8000/competition/'
+      const pathCompetition = 'http://localhost:8000/competitions/'
 
       axios.get(pathMatches)
         .then((res) => {
           var matches = res.data.filter((match) => {
-            return match.competition_id != null
+            return match.competition.name != null
           })
           var promises = []
           for (let i = 0; i < matches.length; i++) {
-            const promise = axios.get(pathCompetition + matches[i].competition_id)
+            const promise = axios.get(pathCompetition + matches[i].competition.name)
               .then((resCompetition) => {
-                delete matches[i].competition_id
+                delete matches[i].competition.name
                 matches[i].competition = {
                   'name': resCompetition.data.competition.name,
                   'category': resCompetition.data.competition.category,
                   'sport': resCompetition.data.competition.sport
                 }
+                matches[i].total_available_tickets = resCompetition.data.total_available_tickets
               })
               .catch((error) => {
                 console.error(error)
@@ -248,10 +201,20 @@ export default {
         .catch((error) => {
           console.error(error)
         })
+    },
+    created () {
+      this.getMatches()
+      this.logged = this.$route.query.logged === 'true'
+      this.username = this.$route.query.username
+      console.log(this.$route)
+      console.log(this.$route.query)
+      console.log(this.$route.query.username)
+      this.token = this.$route.query.token
+      if (this.logged === undefined) {
+        this.logged = false
+      }
+      this.getAccount()
     }
-  },
-  created () {
-    this.getMatches()
   }
 }
 

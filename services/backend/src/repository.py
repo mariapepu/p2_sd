@@ -1,69 +1,52 @@
 from fastapi import HTTPException
 from numpy import select
 from sqlalchemy.orm import Session
+import models, schemas
 from models import Competition, Match, Team, Order, Account
-from schemas import CompetitionCreate, MatchCreate, TeamCreate, OrderCreate
+from schemas import CompetitionCreate, MatchCreate, TeamCreate
 from sqlalchemy import select, or_
+
 from utils import get_hashed_password
 
 
-#########
-# TEAMS #
-#########
-
+# ----------------------------------------TEAMS----------------------------------------
 def get_team(db: Session, team_id: int):
-    return db.query(Team).filter(Team.id == team_id).first()
+    print("get_team", team_id)
+    return db.query(models.Team).filter(models.Team.id == team_id).first()
 
 
 def get_team_by_name(db: Session, name: str):
-    return db.query(Team).filter(Team.name == name).first()
+    print("Dins de team by name")
+    return db.query(models.Team).filter(models.Team.name == name).first()
+
+
+def get_team_by_id(db: Session, id: int):
+    print("Dins de team by id")
+    return db.query(models.Team).filter(models.Team.id == id).first()
 
 
 def get_teams(db: Session, skip: int = 0, limit: int = 1000):
-    return db.query(Team).offset(skip).limit(limit).all()
+    return db.query(models.Team).offset(skip).limit(limit).all()
 
 
 def create_team(db: Session, team: TeamCreate):
-    db_team = Team(name=team.name, country=team.country, description=team.description)
-    try:
-        db.add(db_team)
-        db.commit()
-        db.refresh(db_team)
-        return db_team
-    except:
-        db.rollback()
-        return {"message": "An error occurred inserting the teams."}, 500
-
-
-def delete_team(db: Session, team_id: int):
-    db_team = get_team(db, team_id)
-    if db_team:
-        try:
-            db.delete(db_team)
-            db.commit()
-            return db_team
-        except:
-            db.rollback()
-            return {"message": "An error occurred deleting the teams."}, 500
+    db_team = models.Team(name=team.name, country=team.country, description=team.description)
+    db.add(db_team)
+    db.commit()
+    db.refresh(db_team)
     return db_team
 
 
-def update_team(db: Session, team_id: int, team: TeamCreate):
-    db_team = get_team(db, team_id)
-    if db_team:
-        try:
-            db_team.name = team.name
-            db_team.country = team.country
-            db_team.description = team.description
-            db.commit()
-            db.refresh(db_team)
-            return db_team
-        except:
-            db.rollback()
-            return {"message": "An error occurred inserting the teams."}, 500
-    return db_team
+def delete_team(db: Session, team_name: str):
+    team = get_team_by_name(db, team_name)
+    if not team:
+        return None
+    db.delete(team)
+    db.commit()
+    return team
 
-def update_team_by_name(db: Session, team_name: str, team: TeamCreate):
+
+def update_team(db: Session, team_name: str, team: TeamCreate):
     db_team = get_team_by_name(db, team_name)
     if not db_team:
         return None
@@ -74,15 +57,16 @@ def update_team_by_name(db: Session, team_name: str, team: TeamCreate):
     db.refresh(db_team)
     return db_team
 
+
 def get_matches_team(db: Session, team_name: str):
     team = get_team_by_name(db, team_name)
     if not team:
         return None
     team_id = team.id
-    return db.query(Match).filter(
+    return db.query(models.Match).filter(
         or_(
-            Match.local_id == team_id,
-            Match.visitor == team_id
+            models.Match.local_id == team_id,
+            models.Match.visitor == team_id
         )
     ).all()
 
@@ -100,24 +84,36 @@ def get_competitions_team(db: Session, team_name: str):
     return compes
 
 
-################
-# COMPETITIONS #
-################
-
+# ----------------------------------------COMPETITIONS----------------------------------------
 def get_competition(db: Session, competition_id: int):
+    print("get_competition", competition_id)
     return db.query(Competition).filter(Competition.id == competition_id).first()
 
 
 def get_competition_by_name(db: Session, name: str):
+    print("Dintre de competition by name")
     return db.query(Competition).filter(Competition.name == name).first()
+
+
+def get_competition_by_id(db: Session, id: int):
+    print("Dintre de competition by name")
+    return db.query(Competition).filter(Competition.id == id).first()
 
 
 def get_competitions(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Competition).offset(skip).limit(limit).all()
 
 
-def create_competition(db: Session, competition: CompetitionCreate):
-    db_competition = Competition(name=competition.name, category=competition.category, sport=competition.sport)
+def create_competition(db: Session, competition: schemas.CompetitionCreate):
+    db_competition = models.Competition(name=competition.name, category=competition.category, sport=competition.sport)
+
+    # #crear teams per a la competició
+    # for t in competition.teams:
+    #     team_dict = t.dict()
+    #     team_id = team_dict['id']
+    #     team = db.query(models.Team).filter(models.Team.id == team_id).one()
+    #     db_competition.teams.append(team)
+
     try:
         db.add(db_competition)
         db.commit()
@@ -125,7 +121,29 @@ def create_competition(db: Session, competition: CompetitionCreate):
         return db_competition
     except:
         db.rollback()
-        return {"message": "An error occurred inserting the competitions."}, 500
+        return "couldn't create the competition"
+
+
+def update_competition(db: Session, competition_id: int, competition: Competition):
+    db_competition = get_competition(db, competition_id)
+    if not db_competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    try:
+        db_competition.name = competition.name
+        db_competition.category = competition.category
+        db_competition.sport = competition.sport
+        db_competition.teams = competition.teams
+        # for match_id in competition.matches:
+        #   match = get_match(db, match_id)
+        #  if not match:
+        #     raise HTTPException(status_code=404, detail=f"match with id {match_id} not found")
+        # db_competition.teams.append(match)
+        db.commit()
+        db.refresh(db_competition)
+        return db_competition
+    except:
+        db.rollback()
+        return {"message": "couldn't update the competition"}
 
 
 def delete_competition(db: Session, competition_id: int):
@@ -138,24 +156,7 @@ def delete_competition(db: Session, competition_id: int):
         return {"message": f"Competition with id {competition_id} has been deleted successfully."}
     except:
         db.rollback()
-        return {"message": "An error occurred deleting the competitions."}, 500
-
-
-def update_competition(db: Session, competition_id: int, competition: Competition):
-    db_competition = get_competition(db, competition_id)
-    if not db_competition:
-        raise HTTPException(status_code=404, detail="Competition not found")
-    try:
-        db_competition.name = competition.name
-        db_competition.category = competition.category
-        db_competition.sport = competition.sport
-        db_competition.teams = competition.teams
-        db.commit()
-        db.refresh(db_competition)
-        return db_competition
-    except:
-        db.rollback()
-        return {"message": "An error occurred deleting the competitions."}, 500
+        return {"message": "couldn't delete the competition"}
 
 
 def get_matches_competition(db: Session, competition_name: str):
@@ -174,10 +175,7 @@ def get_teams_competition(db: Session, competition_name: str):
     return teams
 
 
-###########
-# MATCHES #
-###########
-
+# ----------------------------------------MATCHES----------------------------------------
 def get_match(db: Session, match_id: int):
     return db.query(Match).filter(Match.id == match_id).first()
 
@@ -186,8 +184,51 @@ def get_matches(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Match).offset(skip).limit(limit).all()
 
 
+def get_match_by_id(db: Session, match_id: int):
+    return db.query(models.Match).filter(models.Match.id == match_id).first()
+
+
 def get_matches_by_date(db: Session, date: str):
-    return db.query(Match).filter(Match.date == date).all()
+    return db.query(models.Match).filter(models.Match.date == date).all()
+
+
+"""def create_match(db: Session, match: MatchCreate):
+    db_match = Match(date=match.date, price=match.price, competition_id=match.competition_id, local_id=match.local_id,
+                     visitor_id=match.visitor_id)
+    db.add(db_match)
+    db.commit()
+    db.refresh(db_match)
+    return db_match"""
+"""def create_match(db: Session, match: MatchCreate):
+    print("Dentro de create_match")
+def create_match(db: Session, match: MatchCreate):
+    print("Dentro de create_match", match.local)
+    local_team = get_team_by_name(db, match.local)
+    print("Local creado")
+    visitor_team = get_team_by_name(db, match.visitor)
+    competition = get_competition_by_name(db, match.competition)
+    print("despues de buscar competicion", competition.name, competition)
+
+    #stmt = select(models.Competition).where(models.Competition.id ==match.competition.id)
+    #if competition is None:
+    print("despues de buscar competicion")
+    print(competition.name, local_team.name, visitor_team.name, competition)
+    if competition is None:
+        # Si la competición no existe, la creamos
+        #print("Creamos competicion")
+        #db_competition = Competition(name=match.competition, category="Senior", sport="Football")
+        #print("la competicion se hac reado bien", db_competition)
+        #db.add(db_competition)
+        #db.commit()
+        #db.refresh(db_competition)
+    #print("Definimos el match en la db")
+    #db_match = Match(date=match.date, price=match.price, competition=competition, local=local_team,
+                     visitor=visitor_team)
+    print("db_match creado", db_match.local)
+    db.add(db_match)
+    db.commit()
+    db.refresh(db_match)
+    return db_match"""
 
 
 def create_match(db: Session, match: MatchCreate):
@@ -201,7 +242,7 @@ def create_match(db: Session, match: MatchCreate):
 
     if competition is None:
         # Si la competición no existe, la creamos
-        db_competition = Competition(
+        db_competition = models.Competition(
             name=match.competition.name,
             category=match.competition.category,
             sport=match.competition.sport
@@ -211,7 +252,7 @@ def create_match(db: Session, match: MatchCreate):
         db.refresh(db_competition)
         competition = db_competition
 
-    db_match = Match(
+    db_match = models.Match(
         date=match.date,
         price=match.price,
         total_available_tickets=match.total_available_tickets,
@@ -229,63 +270,52 @@ def delete_match(db: Session, match_id: int):
     db_match = get_match(db, match_id)
     if not db_match:
         raise HTTPException(status_code=404, detail="Match not found")
-    try:
-        db.delete(db_match)
-        db.commit()
-        return {"message": f"Match with id {match_id} has been deleted successfully."}
-    except:
-        db.rollback()
-        return {"message": "An error occurred deleting the competitions."}, 500
+    db.delete(db_match)
+    db.commit()
+    return {"message": f"Match with id {match_id} has been deleted successfully."}
 
 
 def update_match(db: Session, match_id: int, match: MatchCreate):
     db_match = get_match(db, match_id)
     if not db_match:
         raise HTTPException(status_code=404, detail="Match not found")
-    try:
-        db_match.name = match.date
-        db_match.country = match.price
-        db_match.description = match.local
-        db_match.description = match.visitor
-        db_match.description = match.competition
-        db_match.description = match.total_available_tickets
-        db.commit()
-        db.refresh(db_match)
-        return db_match
-    except:
-        db.rollback()
-        return {"message": "An error occurred deleting the competitions."}, 500
+    db_match.date = match.date
+    db_match.price = match.price
+    db_match.competition_id = match.competition_id
+    db_match.local_id = match.local_id
+    db_match.visitor_id = match.visitor_id
+    db.commit()
+    db.refresh(db_match)
+    return db_match
 
 
 def get_teams_match(db: Session, match_id: int):
-    db_match = get_match(db, match_id)
+    db_match = get_match_by_id(db, match_id)
     if not db_match:
         raise HTTPException(status_code=404, detail="Match not found")
     local_id = db_match.local_id
     visitor_id = db_match.visitor_id
-    local = get_team(db, local_id)
-    visitor = get_team(db, visitor_id)
+    local = get_team_by_id(db, local_id)
+    visitor = get_team_by_id(db, visitor_id)
     teams = [local, visitor]
     return teams
 
 
 def get_competition_match(db: Session, match_id: int):
-    db_match = get_match(db, match_id)
+    db_match = get_match_by_id(db, match_id)
     if not db_match:
         raise HTTPException(status_code=404, detail="Match not found")
     competition_id = db_match.competition_id
-    competition = get_competition(db, competition_id)
+    competition = get_competition_by_id(db, competition_id)
     return competition
 
 
-##########
-# ORDERS #
-##########
+# ----------------------------------------ACCOUNTS Y ORDERS----------------------------------------
 def get_orders_by_username(db: Session, username: str):
     # acc = select(models.Account).where(models.Account.username == username)
     # account: schemas.Account = db.execute(acc).scalar()
     # return account.orders
-    acc = db.query(Account).filter(Account.username == username).first()
+    acc = db.query(models.Account).filter(models.Account.username == username).first()
     return acc.orders
 
 
@@ -294,7 +324,7 @@ def get_account_by_username(db: Session, username: str):
 
 
 def create_account(db: Session, account: dict):
-    db_account = Account(
+    db_account = models.Account(
         username=account['username'],
         available_money=account['available_money'],
         is_admin=account['is_admin']
@@ -311,18 +341,18 @@ def create_account(db: Session, account: dict):
         return "couldn't create the account"
 
 
-def create_orders(db: Session, username: str, order: OrderCreate):
-    db_order = Order(match_id=order.match_id, tickets_bought=order.tickets_bought)
+def create_orders(db: Session, username: str, order: schemas.OrderCreate):
+    db_order = models.Order(match_id=order.match_id, tickets_bought=order.tickets_bought)
 
     # para seleccionar una account y no la lista de accounts
-    acc = select(Account).where(Account.username == username)
+    acc = select(models.Account).where(models.Account.username == username)
     # para que la account sea una Account y no un Select
-    account: Account = db.execute(acc).scalar()
+    account: schemas.Account = db.execute(acc).scalar()
 
     # para seleccionar un Match y no la lista de Matches
-    match = select(Match).where(Match.id == order.match_id)
+    match = select(models.Match).where(models.Match.id == order.match_id)
     # para que el Match sea un Match y no un Select
-    game: Match = db.execute(match).scalar()
+    game: schemas.Match = db.execute(match).scalar()
     if account.available_money < (game.price * db_order.tickets_bought):
         return "you don't have enough money"
 

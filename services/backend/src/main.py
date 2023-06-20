@@ -1,25 +1,32 @@
-from datetime import datetime
-from typing import List
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy.sql.functions import user
 
-from fastapi import Depends, HTTPException, status
+import repository, models, schemas, utils
+from schemas import SystemAccount
+from database import SessionLocal, engine
+from typing import List
 from fastapi import FastAPI
-from fastapi import Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Request
 from fastapi.templating import Jinja2Templates
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import RedirectResponse
+from utils import verify_password, create_access_token, create_refresh_token, get_hashed_password
+
+# sessio5 imports
+# from typing import Union, Any
+from datetime import datetime
+from fastapi import Depends, HTTPException, status
+# from fastapi.security import OAuth2PasswordBearer
+# from . import utils
 from jose import jwt
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
 
-import models
-import repository
-import schemas
-import utils
-from database import SessionLocal, engine
 from dependencies import get_settings, reuseable_oauth
 from schemas import TokenPayload, SystemAccount
-from utils import verify_password, create_access_token, create_refresh_token, get_hashed_password
+from fastapi.security import OAuth2PasswordBearer
 
 app = FastAPI()
 
@@ -32,10 +39,13 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory="../../frontend/dist/static"), name="static")
+
 templates = Jinja2Templates(directory="../../frontend/dist")
+
 models.Base.metadata.create_all(bind=engine)  # Creem la base de dades amb els models que hem definit a SQLAlchemy
 
 
+# Dependency to get a DB session
 def get_db():
     db = SessionLocal()
     try:
@@ -47,15 +57,6 @@ def get_db():
 @app.get("/")
 async def serve_index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
-
-
-"""@app.get("/hello/{name}")
-async def say_hello(name: str):
-    return {"message": f"Hello {name}"}
-
-@app.get('/python')
-def like_python():
-    return {'I like Python!'}"""
 
 
 async def get_current_user(settings: utils.Settings = Depends(get_settings),
@@ -84,56 +85,61 @@ async def get_current_user(settings: utils.Settings = Depends(get_settings),
     user = db.query(models.Account).filter(models.Account.username == username).first()
     # if user does not exist, raise an exception
     if not user:
-        raise HTTPException(status_code=400, detail="User doesn't exist, use Sign In to create one")
+        raise HTTPException(status_code = 400, detail = "User doesn't exist, use Sign In to create one")
     # if user exist, return user Schema with password hashed
     else:
         return SystemAccount(**user)
 
 
-#########
-# TEAMS #
-#########
+# ----------------------------------------TEAMS----------------------------------------
+@app.get("/teams/", response_model=List[schemas.Team])
+def read_teams(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    return repository.get_teams(db, skip=skip, limit=limit)
 
-# @app.get(): s’utilitza per sol·licitar informació
-@app.get("/teams/{team_name}", summary="Get details of team given its name", response_model=schemas.Team)
+
+@app.post("/teams/", response_model=schemas.Team)
+def create_team(team: schemas.TeamCreate, db: Session = Depends(get_db)):
+    db_team = repository.get_team_by_name(db, name=team.name)
+    if db_team:
+        raise HTTPException(status_code=400, detail="Team already Exists, Use put for updating")
+    else:
+        return repository.create_team(db=db, team=team)
+
+
+@app.get("/teams/{team_name}", response_model=schemas.Team)
 def read_team(team_name: str, db: Session = Depends(get_db)):
-    team = repository.get_team_by_name(db, team_name)
+    team = repository.get_team_by_name(db, name=team_name)
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
     return team
 
 
-@app.get("/teams/", summary="Get details of teams with id from skip to skip+limit", response_model=list[schemas.Team])
-def read_teams(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
-    return repository.get_teams(db, skip=skip, limit=limit)
-
-
-# @app.post(): s’utilitza per afegir nous elements a la nostra estructura de dades
-@app.post("/teams/", summary="Create new team", response_model=schemas.Team)
-def create_team(team: schemas.TeamCreate, db: Session = Depends(get_db)):
-    db_team = repository.get_team_by_name(db, team.name)
-    if db_team:
-        raise HTTPException(status_code=400, detail="Team already exists, use put for updating")
-    return repository.create_team(db, team)
-
-
-# @app.delete(): s'utilitza per eliminar elements de la nostra estructura de dades
-@app.delete("/teams/{team_name}", summary="Delete team given its name", response_model=schemas.Team)
+@app.delete("/teams/{team_name}", response_model=dict)
 def delete_team(team_name: str, db: Session = Depends(get_db)):
-    team = repository.get_team_by_name(db, team_name)
+    team = repository.get_team_by_name(db, name=team_name)
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
-    return repository.delete_team(db, team.id)
+    repository.delete_team(db=db, team_name=team_name)
+    return {"message": f"{team_name} has been deleted successfully."}
 
 
-# @app.put(): s’utilitza per modificar els elements existents a la nostra estructura de dades
-@app.put("/teams/{team_name}", summary="Update team given its name and updated data", response_model=schemas.Team)
-def update_team(team_name: str, team: schemas.TeamCreate, db: Session = Depends(get_db)):
+@app.put("/teams/{team_id}", response_model=schemas.Team)
+def update_team(team_id: int, team: schemas.TeamCreate, db: Session = Depends(get_db)):
+    db_team = repository.get_team(db=db, team_id=team_id)
+    if not db_team:
+        db_team = repository.create_team(db=db, team=team)
+    else:
+        db_team = repository.update_team(db=db, team_name=db_team.name, team=team)
+    return db_team
+
+
+@app.put("/team/{team_name}", response_model=schemas.Team)
+def update_team_by_name(team_name: str, team: schemas.TeamCreate, db: Session = Depends(get_db)):
     db_team = repository.get_team_by_name(db=db, name=team_name)
     if not db_team:
         db_team = repository.create_team(db=db, team=team)
     else:
-        db_team = repository.update_team_by_name(db=db, team_name=db_team.name, team=team)
+        db_team = repository.update_team(db=db, team_name=db_team.name, team=team)
     return db_team
 
 
@@ -157,12 +163,10 @@ def get_competitions_team(team_name: str, db: Session = Depends(get_db)):
     return competitions
 
 
-################
-# COMPETITIONS #
-################
+# ----------------------------------------COMPETITIONS----------------------------------------
 
-@app.get("/competitions/", summary="Get competitions with id from skip to skip+limit",
-         response_model=list[schemas.Competition])
+# llegir les competicions
+@app.get("/competitions/", response_model=List[schemas.Competition])
 def read_competitions(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return repository.get_competitions(db, skip=skip, limit=limit)
 
@@ -171,46 +175,25 @@ def read_competitions(skip: int = 0, limit: int = 10, db: Session = Depends(get_
 def create_competition(competition: schemas.CompetitionCreate, db: Session = Depends(get_db)):
     db_competition = repository.get_competition_by_name(db, name=competition.name)
     if db_competition:
-        raise HTTPException(status_code=400, detail="Competition already Exists, Use put for updating")
+        raise HTTPException(status_code=400, detail="Competition already exists, use PUT for updating")
     else:
         return repository.create_competition(db=db, competition=competition)
 
 
+@app.get("/competition/{competition_name}", response_model=schemas.Competition)
+def read_competition_by_name(competition_name: str, db: Session = Depends(get_db)):
+    competition = repository.get_competition_by_name(db, name=competition_name)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return competition
+
+
 @app.get("/competitions/{competition_id}", response_model=schemas.Competition)
-def get_competition(competition_id: int, db: Session = Depends(get_db)):
-    competition = repository.get_competition(db, competition_id)
-    if not competition:
+def read_competition(competition_id: int, db: Session = Depends(get_db)):
+    db_competition = repository.get_competition(db, competition_id=competition_id)
+    if db_competition is None:
         raise HTTPException(status_code=404, detail="Competition not found")
-    return competition
-
-
-@app.delete("/competitions/{competition_id}", response_model=schemas.Competition)
-def delete_match(competition_id: int, db: Session = Depends(get_db)):
-    competition = repository.get_match(db, competition_id)
-    if competition:
-        repository.delete_competition(db=db, competition_id=competition_id)
-        return competition
-    else:
-        raise HTTPException(status_code=400, detail="Competition not found")
-
-
-@app.get("/competitions/{competition_name}", summary="Get details of competition given its name",
-         response_model=schemas.Competition)
-def read_competition(competition_name: str, db: Session = Depends(get_db)):
-    competition = repository.get_competition_by_name(db, competition_name)
-    if not competition:
-        raise HTTPException(status_code=404, detail="Competition not found")
-    return competition
-
-
-@app.delete("/competitions/{competition_id}", response_model=schemas.Competition)
-def delete_competition(competition_id: int, db: Session = Depends(get_db)):
-    competition = repository.get_competition(db, competition_id=competition_id)
-    if competition:
-        repository.delete_competition(db=db, competition_id=competition.id)
-        return competition
-    else:
-        raise HTTPException(status_code=400, detail="Competition not found")
+    return db_competition
 
 
 # actualitzar una competició amb un cert id
@@ -222,6 +205,16 @@ def update_competition(competition_name: str, competition: schemas.Competition, 
     updated_competition = repository.update_competition(db=db, competition_id=db_competition.id,
                                                         competition=competition)
     return updated_competition
+
+
+# eliminar una competició amb un cert id
+@app.delete("/competitions/{competition_name}", response_model=dict)
+def delete_competition(competition_name: str, db: Session = Depends(get_db)):
+    competition = repository.get_competition_by_name(db, name=competition_name)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    repository.delete_competition(db=db, competition_id=competition.id)
+    return {"message": f"{competition_name} has been deleted successfully."}
 
 
 # retorna tots els partits d'una competició, donada el seu nom.
@@ -244,13 +237,32 @@ def get_teams_competition(competition_name: str, db: Session = Depends(get_db)):
     return teams
 
 
-###########
-# MATCHES #
-###########
+# ----------------------------------------MATCHES----------------------------------------
 
-@app.get("/matches/", summary="Get matches with id from skip to skip+limit", response_model=list[schemas.Match])
+# Llegim els matches
+@app.get("/matches/", response_model=List[schemas.Match])
 def read_matches(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return repository.get_matches(db, skip=skip, limit=limit)
+
+
+"""@app.post("/matches/", response_model=schemas.Match)
+def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
+    # En principio se pueden repetir nomrbes, deberiamos controlar, que no haya un mismo equipo jugando el mismo date
+    db_match = repository.create_match(db=db, match=match)
+    return db_match"""
+
+"""@app.post("/matches/", response_model=schemas.Match)
+=======
+
+@app.post("/matches/", response_model=schemas.Match)
+>>>>>>> 9680a673bfec7364bee0efeac63068ce73c8968e
+def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
+    # En principio se pueden repetir nomrbes, deberiamos controlar, que no haya un mismo equipo jugando el mismo date
+    print("antes de llamarlo")
+    db_match = repository.create_match(db=db, match=match)
+    print("despues de llamarlo")
+
+    return db_match"""
 
 
 @app.post("/matches/", response_model=schemas.Match)
@@ -269,9 +281,9 @@ def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
     return db_match
 
 
-@app.get("/matches/{match_id}", summary="Get details of match with id match_id", response_model=schemas.Match)
-def read_match(match_id: int, db: Session = Depends(get_db)):
-    match = repository.get_match(db, match_id)
+@app.get("/matches/{match_id}", response_model=schemas.Match)
+def read_match_by_id(match_id: int, db: Session = Depends(get_db)):
+    match = repository.get_match_by_id(db, match_id=match_id)
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
     return match
@@ -320,13 +332,11 @@ def get_competition_match(match_id: int, db: Session = Depends(get_db)):
     db_match = repository.get_match(db=db, match_id=match_id)
     if not db_match:
         raise HTTPException(status_code=404, detail="Match not found")
-    competition = repository.get_competition_match(db=db, match_id=db_match.id)
+    competition = repository.get_competition_match()
     return competition
 
 
-##########
-# ORDERS AND ACCOUNT#
-##########
+# ----------------------------------------ACCOUNTS Y ORDERS----------------------------------------
 @app.get('/orders/{username}', response_model=List[schemas.Order])
 def get_orders_by_username(username: str, db: Session = Depends(get_db)):
     orders = repository.get_orders_by_username(db, username=username)

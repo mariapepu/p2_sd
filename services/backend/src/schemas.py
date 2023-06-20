@@ -1,13 +1,10 @@
-from datetime import datetime
+# mport enum
+from models import sports_list, categories_list, Category, Sports
 from pydantic import BaseModel, Field
 from typing import Optional
-from models import sports_list, categories_list, Category, Sports
+from datetime import datetime
 from typing import List
 
-
-#########
-# TEAMS #
-#########
 
 class TeamBase(BaseModel):
     name: str
@@ -26,10 +23,6 @@ class Team(TeamBase):
         orm_mode = True
 
 
-################
-# COMPETITIONS #
-################
-
 class CompetitionBase(BaseModel):
     name: str
     category: Category
@@ -44,20 +37,21 @@ class Competition(CompetitionBase):
     id: int
     teams: List[Team] = []
 
+    # matches: List[Match] = []
+
     class Config:
         orm_mode = True
 
 
-###########
-# MATCHES #
-###########
-
 class MatchBase(BaseModel):
     date: datetime
     price: float
+    """local: str
+    visitor: str
+    competition: str"""
     local: Team
     visitor: Team
-    competition: Competition
+    competition: Competition  # Asi funciona con postman y como deberia ser
     total_available_tickets: int
 
 
@@ -71,10 +65,6 @@ class Match(MatchBase):
     class Config:
         orm_mode = True
 
-
-##########
-# ORDERS #
-##########
 
 class OrderBase(BaseModel):
     match_id: int
@@ -92,10 +82,6 @@ class Order(OrderBase):
     class Config:
         orm_mode = True
 
-
-############
-# ACCOUNTS #
-############
 
 class AccountBase(BaseModel):
     username: str
@@ -119,10 +105,6 @@ class Account(AccountBase):
     class Config:
         orm_mode = True
 
-
-##########
-# TOKENS #
-##########
 
 class TokenSchema(BaseModel):
     access_token: str
