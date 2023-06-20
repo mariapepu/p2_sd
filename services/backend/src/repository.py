@@ -1,31 +1,30 @@
+from fastapi import HTTPException
+from numpy import select
 from sqlalchemy.orm import Session
-import models, schemas
+from models import Competition, Match, Team, Order, Account
+from schemas import CompetitionCreate, MatchCreate, TeamCreate, OrderCreate
+from sqlalchemy import select, or_
+from utils import get_hashed_password
+
 
 #########
 # TEAMS #
 #########
 
 def get_team(db: Session, team_id: int):
-    return db.query(models.Team).filter(models.Team.id == team_id).first()
+    return db.query(Team).filter(Team.id == team_id).first()
+
 
 def get_team_by_name(db: Session, name: str):
-    return db.query(models.Team).filter(models.Team.name == name).first()
+    return db.query(Team).filter(Team.name == name).first()
 
-def get_teams(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Team).offset(skip).limit(limit).all()
 
-#TODO check if this works
-def get_teams_by_competition(db: Session, competition_id: int):
-    competition = get_competition(db, competition_id)
-    return competition.teams
+def get_teams(db: Session, skip: int = 0, limit: int = 1000):
+    return db.query(Team).offset(skip).limit(limit).all()
 
-#TODO check if this works
-def get_teams_by_match(db: Session, match_id: int):
-    match = get_match(db, match_id)
-    return list[match.local, match.visitor]
 
-def create_team(db: Session, team: schemas.TeamCreate):
-    db_team = models.Team(name=team.name, country=team.country, description=team.description)
+def create_team(db: Session, team: TeamCreate):
+    db_team = Team(name=team.name, country=team.country, description=team.description)
     try:
         db.add(db_team)
         db.commit()
@@ -35,29 +34,27 @@ def create_team(db: Session, team: schemas.TeamCreate):
         db.rollback()
         return {"message": "An error occurred inserting the teams."}, 500
 
+
 def delete_team(db: Session, team_id: int):
     db_team = get_team(db, team_id)
     if db_team:
         try:
             db.delete(db_team)
             db.commit()
-            db.refresh(db_team)
             return db_team
         except:
             db.rollback()
             return {"message": "An error occurred deleting the teams."}, 500
     return db_team
 
-def update_team(db: Session, team_id: int, team: schemas.TeamCreate):
+
+def update_team(db: Session, team_id: int, team: TeamCreate):
     db_team = get_team(db, team_id)
     if db_team:
         try:
-            if team.name:
-                db_team.name = team.name
-            if team.country:
-                db_team.country = team.country
-            if team.description:
-                db_team.description = team.description
+            db_team.name = team.name
+            db_team.country = team.country
+            db_team.description = team.description
             db.commit()
             db.refresh(db_team)
             return db_team
@@ -66,45 +63,93 @@ def update_team(db: Session, team_id: int, team: schemas.TeamCreate):
             return {"message": "An error occurred inserting the teams."}, 500
     return db_team
 
+def update_team_by_name(db: Session, team_name: str, team: TeamCreate):
+    db_team = get_team_by_name(db, team_name)
+    if not db_team:
+        return None
+    db_team.name = team.name
+    db_team.country = team.country
+    db_team.description = team.description
+    db.commit()
+    db.refresh(db_team)
+    return db_team
+
+def get_matches_team(db: Session, team_name: str):
+    team = get_team_by_name(db, team_name)
+    if not team:
+        return None
+    team_id = team.id
+    return db.query(Match).filter(
+        or_(
+            Match.local_id == team_id,
+            Match.visitor == team_id
+        )
+    ).all()
+
+
+def get_competitions_team(db: Session, team_name: str):
+    team = get_team_by_name(db, team_name)
+    if not team:
+        return None
+    team_id = team.id
+    compes = []
+    competitions = get_competitions(db, 0, 100)
+    for comp in competitions:
+        if any(team.id == t.id for t in comp.teams):
+            compes.append(comp)
+    return compes
+
+
 ################
 # COMPETITIONS #
 ################
 
 def get_competition(db: Session, competition_id: int):
-    return db.query(models.Competition).filter(models.Competition.id == competition_id).first()
+    return db.query(Competition).filter(Competition.id == competition_id).first()
+
 
 def get_competition_by_name(db: Session, name: str):
-    return db.query(models.Competition).filter(models.Competition.name == name).first()
+    return db.query(Competition).filter(Competition.name == name).first()
+
 
 def get_competitions(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Competition).offset(skip).limit(limit).all()
+    return db.query(Competition).offset(skip).limit(limit).all()
 
-#TODO check if this works
-def get_competitions_by_team(db: Session, team_id: int):
-    return db.query(models.Competition).filter(team_id in [team.id for team in models.Competition.teams])
 
-#TODO check if this works
-def get_competition_by_match(db, match_id):
-    match = get_match(db, match_id)
-    return get_competition(db, match.competition_id)
+def create_competition(db: Session, competition: CompetitionCreate):
+    db_competition = Competition(name=competition.name, category=competition.category, sport=competition.sport)
+    try:
+        db.add(db_competition)
+        db.commit()
+        db.refresh(db_competition)
+        return db_competition
+    except:
+        db.rollback()
+        return {"message": "An error occurred inserting the competitions."}, 500
 
-def create_competition(db: Session, competition: schemas.CompetitionCreate):
-    db_competition = models.Competition(name=competition.name, category=competition.category, sport=competition.sport)
-    if db_competition:
-        try:
-            db.add(db_competition)
-            db.commit()
-            db.refresh(db_competition)
-            return db_competition
-        except:
-            db.rollback()
-            return {"message": "An error occurred inserting the competitions."}, 500
-    return db_competition
 
 def delete_competition(db: Session, competition_id: int):
     db_competition = get_competition(db, competition_id)
+    if not db_competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
     try:
         db.delete(db_competition)
+        db.commit()
+        return {"message": f"Competition with id {competition_id} has been deleted successfully."}
+    except:
+        db.rollback()
+        return {"message": "An error occurred deleting the competitions."}, 500
+
+
+def update_competition(db: Session, competition_id: int, competition: Competition):
+    db_competition = get_competition(db, competition_id)
+    if not db_competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    try:
+        db_competition.name = competition.name
+        db_competition.category = competition.category
+        db_competition.sport = competition.sport
+        db_competition.teams = competition.teams
         db.commit()
         db.refresh(db_competition)
         return db_competition
@@ -112,158 +157,150 @@ def delete_competition(db: Session, competition_id: int):
         db.rollback()
         return {"message": "An error occurred deleting the competitions."}, 500
 
-def update_competition(db: Session, competition_id: int, competition: schemas.CompetitionCreate):
-    db_competition = get_competition(db, competition_id)
-    if db_competition:
-        try:
-            if competition.name:
-                db_competition.name = competition.name
-            if competition.category:
-                db_competition.category = competition.category
-            if competition.sport:
-                db_competition.sport = competition.sport
-            db.commit()
-            db.refresh(db_competition)
-            return db_competition
-        except:
-            db.rollback()
-            return {"message": "An error occurred deleting the competitions."}, 500
-    return db_competition
+
+def get_matches_competition(db: Session, competition_name: str):
+    db_competition = get_competition_by_name(db, competition_name)
+    if not db_competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    matches = db_competition.match
+    return matches
+
+
+def get_teams_competition(db: Session, competition_name: str):
+    db_competition = get_competition_by_name(db, competition_name)
+    if not db_competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    teams = db_competition.teams
+    return teams
+
 
 ###########
 # MATCHES #
 ###########
 
 def get_match(db: Session, match_id: int):
-    return db.query(models.Match).filter(models.Match.id == match_id).first()
+    return db.query(Match).filter(Match.id == match_id).first()
+
 
 def get_matches(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Match).offset(skip).limit(limit).all()
+    return db.query(Match).offset(skip).limit(limit).all()
 
-# TODO check if this works
-def get_matches_by_team(db: Session, team_id: int):
-    return db.query(models.Match).filter(team_id == models.Match.local_id or team_id == models.Match.visitor_id)
 
-# TODO check if this works
-def get_matches_by_competition(db: Session, competition_id: int):
-    return db.query(models.Match).filter(competition_id == models.Match.competition_id)
+def get_matches_by_date(db: Session, date: str):
+    return db.query(Match).filter(Match.date == date).all()
 
-def create_match(db: Session, match: schemas.MatchCreate):
-    db_match = models.Match(date=match.date, price=match.price, local=match.local, visitor=match.visitor, competition=match.competition, total_available_tickets=match.total_available_tickets)
+
+def create_match(db: Session, match: MatchCreate):
+    local_team = get_team_by_name(db, match.local.name)
+    if local_team is None:
+        raise HTTPException(status_code=422, detail="Local team not found")
+    visitor_team = get_team_by_name(db, match.visitor.name)
+    if visitor_team is None:
+        raise HTTPException(status_code=422, detail="Visitor team not found")
+    competition = get_competition_by_name(db, match.competition.name)
+
+    if competition is None:
+        # Si la competición no existe, la creamos
+        db_competition = Competition(
+            name=match.competition.name,
+            category=match.competition.category,
+            sport=match.competition.sport
+        )
+        db.add(db_competition)
+        db.commit()
+        db.refresh(db_competition)
+        competition = db_competition
+
+    db_match = Match(
+        date=match.date,
+        price=match.price,
+        total_available_tickets=match.total_available_tickets,
+        competition=competition,
+        local=local_team,
+        visitor=visitor_team
+    )
+    db.add(db_match)
+    db.commit()
+    db.refresh(db_match)
+    return db_match
+
+
+def delete_match(db: Session, match_id: int):
+    db_match = get_match(db, match_id)
+    if not db_match:
+        raise HTTPException(status_code=404, detail="Match not found")
     try:
-        db.add(db_match)
+        db.delete(db_match)
+        db.commit()
+        return {"message": f"Match with id {match_id} has been deleted successfully."}
+    except:
+        db.rollback()
+        return {"message": "An error occurred deleting the competitions."}, 500
+
+
+def update_match(db: Session, match_id: int, match: MatchCreate):
+    db_match = get_match(db, match_id)
+    if not db_match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    try:
+        db_match.name = match.date
+        db_match.country = match.price
+        db_match.description = match.local
+        db_match.description = match.visitor
+        db_match.description = match.competition
+        db_match.description = match.total_available_tickets
         db.commit()
         db.refresh(db_match)
         return db_match
     except:
         db.rollback()
-        return {"message": "An error occurred inserting the matches."}, 500
+        return {"message": "An error occurred deleting the competitions."}, 500
 
-def delete_match(db: Session, match_id: int):
-    db_match = get_match(db, match_id)
-    if db_match:
-        try:
-            db.delete(db_match)
-            db.commit()
-            db.refresh(db_match)
-            return db_match
-        except:
-            db.rollback()
-            return {"message": "An error occurred deleting the competitions."}, 500
-    return db_match
 
-def update_match(db: Session, match_id: int, match: schemas.MatchCreate):
+def get_teams_match(db: Session, match_id: int):
     db_match = get_match(db, match_id)
-    if db_match:
-        try:
-            if match.date:
-                db_match.name = match.date
-            if match.price:
-                db_match.country = match.price
-            if match.local:
-                db_match.description = match.local
-            if match.visitor:
-                db_match.description = match.visitor
-            if match.competition:
-                db_match.description = match.competition
-            if match.total_available_tickets:
-                db_match.description = match.total_available_tickets
-            db.commit()
-            db.refresh(db_match)
-            return db_match
-        except:
-            db.rollback()
-            return {"message": "An error occurred deleting the competitions."}, 500
-    return db_match
+    if not db_match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    local_id = db_match.local_id
+    visitor_id = db_match.visitor_id
+    local = get_team(db, local_id)
+    visitor = get_team(db, visitor_id)
+    teams = [local, visitor]
+    return teams
+
+
+def get_competition_match(db: Session, match_id: int):
+    db_match = get_match(db, match_id)
+    if not db_match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    competition_id = db_match.competition_id
+    competition = get_competition(db, competition_id)
+    return competition
+
 
 ##########
 # ORDERS #
 ##########
+def get_orders_by_username(db: Session, username: str):
+    # acc = select(models.Account).where(models.Account.username == username)
+    # account: schemas.Account = db.execute(acc).scalar()
+    # return account.orders
+    acc = db.query(Account).filter(Account.username == username).first()
+    return acc.orders
 
-def get_order(db: Session, order_id: int):
-    return db.query(models.Order).filter(models.Order.id == order_id).first()
 
-def get_order_by_username(db: Session, username: str):
-    return db.query(models.Order).filter(models.Order.name == username).first()
+def get_account_by_username(db: Session, username: str):
+    return db.query(Account).filter(Account.username == username).first()
 
-def get_orders(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Order).offset(skip).limit(limit).all()
 
-def create_order(db: Session, order: schemas.OrderCreate):
-    db_order = models.Order(name=order.match_id, tickets_bought=order.tickets_bought)
-    try:
-        db.add(db_order)
-        db.commit()
-        db.refresh(db_order)
-        return db_order
-    except:
-        db.rollback()
-        return {"message": "An error occurred inserting the orders."}, 500
+def create_account(db: Session, account: dict):
+    db_account = Account(
+        username=account['username'],
+        available_money=account['available_money'],
+        is_admin=account['is_admin']
+    )
+    db_account.password = get_hashed_password(account['password'])
 
-def delete_order(db: Session, order_id: int):
-    db_order = get_order(db, order_id)
-    if db_order:
-        try:
-            db.delete(db_order)
-            db.commit()
-            db.refresh(db_order)
-            return db_order
-        except:
-            db.rollback()
-            return {"message": "An error occurred deleting the competitions."}, 500
-    return db_order
-
-def update_order(db: Session, order_id: int, order: schemas.OrderCreate):
-    db_order = get_order(db, order_id)
-    if db_order:
-        try:
-            if order.match_id:
-                db_order.match_id = order.match_id
-            if order.tickets_bought:
-                db_order.tickets_bought = order.tickets_bought
-            db.commit()
-            db.refresh(db_order)
-            return db_order
-        except:
-            db.rollback()
-            return {"message": "An error occurred deleting the competitions."}, 500
-    return db_order
-
-############
-# ACCOUNTS #
-############
-
-def get_account(db: Session, account_id: int):
-    return db.query(models.Account).filter(models.Account.id == account_id).first()
-
-def get_account_by_name(db: Session, username: str):
-    return db.query(models.Account).filter(models.Account.name == username).first()
-
-def get_accounts(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Account).offset(skip).limit(limit).all()
-
-def create_account(db: Session, account: schemas.AccountCreate):
-    db_account = models.Account(is_admin=account.is_admin, available_money=account.available_money)
     try:
         db.add(db_account)
         db.commit()
@@ -271,48 +308,72 @@ def create_account(db: Session, account: schemas.AccountCreate):
         return db_account
     except:
         db.rollback()
-        return {"message": "An error occurred inserting the accounts."}, 500
+        return "couldn't create the account"
 
-def delete_account(db: Session, account_id: int):
-    db_account = get_account(db, account_id)
-    if db_account:
+
+def create_orders(db: Session, username: str, order: OrderCreate):
+    db_order = Order(match_id=order.match_id, tickets_bought=order.tickets_bought)
+
+    # para seleccionar una account y no la lista de accounts
+    acc = select(Account).where(Account.username == username)
+    # para que la account sea una Account y no un Select
+    account: Account = db.execute(acc).scalar()
+
+    # para seleccionar un Match y no la lista de Matches
+    match = select(Match).where(Match.id == order.match_id)
+    # para que el Match sea un Match y no un Select
+    game: Match = db.execute(match).scalar()
+    if account.available_money < (game.price * db_order.tickets_bought):
+        return "you don't have enough money"
+
+    if game.total_available_tickets < db_order.tickets_bought:
+        return "there are not enough tickets. Only " + account.available_money.toString() + "remaining"
+
+    else:
+        game.total_available_tickets -= db_order.tickets_bought
+        account.available_money -= (game.price * db_order.tickets_bought)
+
+        account.orders.append(db_order)
         try:
-            db.delete(db_account)
+            db.add(db_order)
             db.commit()
-            db.refresh(db_account)
-            return db_account
+            db.refresh(db_order)
+            return db_order
         except:
             db.rollback()
-            return {"message": "An error occurred deleting the competitions."}, 500
-    return db_account
+            return "couldn't create the order"
 
-def update_account(db: Session, account_id: int, account: schemas.AccountCreate):
-    db_account = get_account(db, account_id)
-    if db_account:
-        try:
-            if account.is_admin:
-                db_account.is_admin = account.is_admin
-            if account.available_money:
-                db_account.available_money = account.available_money
-            db.commit()
-            db.refresh(db_account)
-            return db_account
-        except:
-            db.rollback()
-            return {"message": "An error occurred deleting the competitions."}, 500
-    return db_account
 
-#TODO these specefications:
-#Comproveu si l'usuari té prou diners per comprar el bitllet
+def get_orders(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(Order).offset(skip).limit(limit).all()
 
-#Comproveu si hi ha entrades disponibles
 
-#Actualitzeu les entrades disponibles a Match (- entrades comprades)
+def get_accounts(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(Account).offset(skip).limit(limit).all()
 
-#Actualitzeu els diners de l'usuari després de comprar els bitllets (-preu * bitllets comprat)
 
-#Afegiu la comanda a la relació d'usuari `user.orders.append(new_order)`
+def delete_account(db: Session, username: str):
+    account = get_account_by_username(db, username)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    db.delete(account)
+    db.commit()
+    return {"message": f"{account.username} has been deleted successfully."}
 
-#Deseu els canvis fets a  comanda, match i l'usuari a la BD. **Atenció!** amb les condicions de carrera!.
-# Feu un sol commit per a totes les operacions i comproveu si es provoca algun error,
-# en aquest cas caldrà fer un rollback i tornar-ho a intentar o retornar un error.
+
+def update_account(db: Session, username: str, acc: Account):
+    db_account = get_account_by_username(db, username)
+    if not db_account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    try:
+        db_account.username = acc.username
+        db_account.password = get_hashed_password(acc.password)
+        db_account.available_money = acc.available_money
+        db_account.is_admin = acc.is_admin
+        db_account.orders = acc.orders
+        db.commit()
+        db.refresh(db_account)
+        return db_account
+    except:
+        db.rollback()
+        return {"message": "couldn't update the account"}

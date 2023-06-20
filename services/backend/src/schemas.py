@@ -1,8 +1,9 @@
 from datetime import datetime
-import enum
 from pydantic import BaseModel, Field
 from typing import Optional
-import models
+from models import sports_list, categories_list, Category, Sports
+from typing import List
+
 
 #########
 # TEAMS #
@@ -13,8 +14,10 @@ class TeamBase(BaseModel):
     country: str
     description: Optional[str] = None
 
+
 class TeamCreate(TeamBase):
     pass
+
 
 class Team(TeamBase):
     id: int
@@ -22,24 +25,28 @@ class Team(TeamBase):
     class Config:
         orm_mode = True
 
+
 ################
 # COMPETITIONS #
 ################
 
 class CompetitionBase(BaseModel):
     name: str
-    category: enum.Enum('category', dict(zip(models.categories_list, models.categories_list)))
-    sport: enum.Enum('sport', dict(zip(models.sports_list, models.sports_list)))
+    category: Category
+    sport: Sports
+
 
 class CompetitionCreate(CompetitionBase):
     pass
 
+
 class Competition(CompetitionBase):
     id: int
-    teams: list[Team] = []
+    teams: List[Team] = []
 
     class Config:
         orm_mode = True
+
 
 ###########
 # MATCHES #
@@ -48,22 +55,22 @@ class Competition(CompetitionBase):
 class MatchBase(BaseModel):
     date: datetime
     price: float
-    local: TeamBase
-    visitor: TeamBase
-    competition: CompetitionBase
-    total_available_tickets: int = 0 #que per defecte sigui el nombre de localitats del lloc on s'està fent (???)
+    local: Team
+    visitor: Team
+    competition: Competition
+    total_available_tickets: int
+
 
 class MatchCreate(MatchBase):
     pass
 
+
 class Match(MatchBase):
     id: int
-    local: Team
-    visitor: Team
-    competition: Competition
 
     class Config:
         orm_mode = True
+
 
 ##########
 # ORDERS #
@@ -73,45 +80,59 @@ class OrderBase(BaseModel):
     match_id: int
     tickets_bought: int
 
+
 class OrderCreate(OrderBase):
-    username: str #= Field(..., description="username")
+    pass
+
 
 class Order(OrderBase):
     id: int
+    username: str
 
     class Config:
         orm_mode = True
+
 
 ############
 # ACCOUNTS #
 ############
 
 class AccountBase(BaseModel):
-    is_admin: int
+    username: str
+    password: str
     available_money: float
+    is_admin: int
+    orders: List[Order] = []
+
 
 class AccountCreate(AccountBase):
     username: str = Field(..., description="username")
-    password: str = Field(..., min_length=8, max_length=24 ,description="user password")
-
-class Account(AccountBase):
-    orders: list[Order] = []
+    password: str = Field(..., min_length=8, max_length=24, description="user password")
 
     class Config:
         orm_mode = True
 
+    pass
+
+
+class Account(AccountBase):
+    class Config:
+        orm_mode = True
+
+
 ##########
 # TOKENS #
 ##########
-"""
+
 class TokenSchema(BaseModel):
     access_token: str
     refresh_token: str
+
 
 class TokenPayload(BaseModel):
     sub: str = None
     exp: int = None
 
-class SystemAccount(models.Account):
+
+class SystemAccount(Account):
     password: str
-"""

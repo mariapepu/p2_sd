@@ -1,18 +1,27 @@
 from datetime import datetime
-from fastapi import Depends, HTTPException, Request
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-import repository, models, schemas
-from database import SessionLocal, engine
+from typing import List
 
-models.Base.metadata.create_all(bind=engine)  # Creem la base de dades amb els models que hem definit a SQLAlchemy
+from fastapi import Depends, HTTPException, status
+from fastapi import FastAPI
+from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from jose import jwt
+from pydantic import ValidationError
+from sqlalchemy.orm import Session
+
+import models
+import repository
+import schemas
+import utils
+from database import SessionLocal, engine
+from dependencies import get_settings, reuseable_oauth
+from schemas import TokenPayload, SystemAccount
+from utils import verify_password, create_access_token, create_refresh_token, get_hashed_password
 
 app = FastAPI()
-
-app.mount("/static", StaticFiles(directory="../../frontend/dist/static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,11 +31,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount("/static", StaticFiles(directory="../../frontend/dist/static"), name="static")
 templates = Jinja2Templates(directory="../../frontend/dist")
-@app.get("/")
-async def serve_index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-# Dependency to get a DB session
+models.Base.metadata.create_all(bind=engine)  # Creem la base de dades amb els models que hem definit a SQLAlchemy
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -34,11 +43,11 @@ def get_db():
     finally:
         db.close()
 
-templates = Jinja2Templates(directory="../../frontend/dist")
 
 @app.get("/")
 async def serve_index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
 
 """@app.get("/hello/{name}")
 async def say_hello(name: str):
@@ -49,23 +58,57 @@ def like_python():
     return {'I like Python!'}"""
 
 
+async def get_current_user(settings: utils.Settings = Depends(get_settings),
+                           db: Session = Depends(get_db),
+                           token: str = Depends(reuseable_oauth)) -> SystemAccount:
+    try:
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.algorithm]
+        )
+        token_data = TokenPayload(**payload)
+
+        if datetime.fromtimestamp(token_data.exp) < datetime.now():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except(jwt.JWTError, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    username: str = token_data.sub
+    # get user from database
+    user = db.query(models.Account).filter(models.Account.username == username).first()
+    # if user does not exist, raise an exception
+    if not user:
+        raise HTTPException(status_code=400, detail="User doesn't exist, use Sign In to create one")
+    # if user exist, return user Schema with password hashed
+    else:
+        return SystemAccount(**user)
+
+
 #########
 # TEAMS #
 #########
 
-#@app.get(): s’utilitza per sol·licitar informació
-@app.get("/team/{team_name}", summary="Get details of team given its name", response_model=schemas.Team)
+# @app.get(): s’utilitza per sol·licitar informació
+@app.get("/teams/{team_name}", summary="Get details of team given its name", response_model=schemas.Team)
 def read_team(team_name: str, db: Session = Depends(get_db)):
     team = repository.get_team_by_name(db, team_name)
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
     return team
 
+
 @app.get("/teams/", summary="Get details of teams with id from skip to skip+limit", response_model=list[schemas.Team])
 def read_teams(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return repository.get_teams(db, skip=skip, limit=limit)
 
-#@app.post(): s’utilitza per afegir nous elements a la nostra estructura de dades
+
+# @app.post(): s’utilitza per afegir nous elements a la nostra estructura de dades
 @app.post("/teams/", summary="Create new team", response_model=schemas.Team)
 def create_team(team: schemas.TeamCreate, db: Session = Depends(get_db)):
     db_team = repository.get_team_by_name(db, team.name)
@@ -73,126 +116,132 @@ def create_team(team: schemas.TeamCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Team already exists, use put for updating")
     return repository.create_team(db, team)
 
-#@app.delete(): s'utilitza per eliminar elements de la nostra estructura de dades
-@app.delete("/team/{team_name}", summary="Delete team given its name", response_model=schemas.Team)
+
+# @app.delete(): s'utilitza per eliminar elements de la nostra estructura de dades
+@app.delete("/teams/{team_name}", summary="Delete team given its name", response_model=schemas.Team)
 def delete_team(team_name: str, db: Session = Depends(get_db)):
     team = repository.get_team_by_name(db, team_name)
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
     return repository.delete_team(db, team.id)
 
-#@app.put(): s’utilitza per modificar els elements existents a la nostra estructura de dades
-@app.put("/team/{team_name}", summary="Update team given its name and updated data", response_model=schemas.Team)
+
+# @app.put(): s’utilitza per modificar els elements existents a la nostra estructura de dades
+@app.put("/teams/{team_name}", summary="Update team given its name and updated data", response_model=schemas.Team)
 def update_team(team_name: str, team: schemas.TeamCreate, db: Session = Depends(get_db)):
-    db_team = repository.get_team_by_name(db, team_name)
+    db_team = repository.get_team_by_name(db=db, name=team_name)
     if not db_team:
-        return create_team(db, team)
-    team_with_updated_name = repository.get_team_by_name(db, team.name)
-    if team_with_updated_name != db_team: #Check that there isn't another team with the same name we are updating
-        raise HTTPException(status_code=400, detail="Team name already in use")
-    return repository.update_team(db, db_team.id, team)
+        db_team = repository.create_team(db=db, team=team)
+    else:
+        db_team = repository.update_team_by_name(db=db, team_name=db_team.name, team=team)
+    return db_team
 
-#GET /competitions/{competition_name}/teams: retorna tots els equips d'una competició, donada el seu nom.
-@app.get("/competitions/{competition_name}/teams", summary="Get all teams of a competition given its name", response_model=list[schemas.Team])
-def read_teams_of_competition(competition_name: str, db: Session = Depends(get_db)):
-    competition = repository.get_competition_by_name(db, competition_name)
-    if not competition:
-        raise HTTPException(status_code=404, detail="Competition not found")
-    return repository.get_teams_by_competition(db, competition.id)
 
-#GET /matches/{match_id}/teams: retorna l'equip local i visitant d'un partit, donat el seu id.
-@app.get("/matches/{match_id}/teams", summary="Get both teams of a match given its id", response_model=list[schemas.Team])
-def read_teams_of_match(match_id: int, db: Session = Depends(get_db)):
-    match = repository.get_match(db, match_id)
-    if not match:
-        raise HTTPException(status_code=404, detail="Match not found")
-    return repository.get_teams_by_match(db, match_id)
+# retorna tots els partits d'un equip, donat el seu nom.
+@app.get("/teams/{team_name}/matches", response_model=List[schemas.Match])
+def get_matches_team(team_name: str, db: Session = Depends(get_db)):
+    team = repository.get_team_by_name(db, name=team_name)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    matches = repository.get_matches_team(db, team_name)
+    return matches
+
+
+# retorna totes les competicions d'un equip, donat el seu nom.
+@app.get("/teams/{team_name}/competitions", response_model=schemas.Team)
+def get_competitions_team(team_name: str, db: Session = Depends(get_db)):
+    team = repository.get_team_by_name(db, name=team_name)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    competitions = repository.get_competitions_team(db, team_name)
+    return competitions
 
 
 ################
 # COMPETITIONS #
 ################
 
-@app.get("/competitions/", summary="Get competitions with id from skip to skip+limit", response_model=list[schemas.Competition])
+@app.get("/competitions/", summary="Get competitions with id from skip to skip+limit",
+         response_model=list[schemas.Competition])
 def read_competitions(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return repository.get_competitions(db, skip=skip, limit=limit)
 
+
 @app.post("/competitions/", response_model=schemas.Competition)
-def create_competition(competition: schemas.Competition,db: Session = Depends(get_db)):
+def create_competition(competition: schemas.CompetitionCreate, db: Session = Depends(get_db)):
     db_competition = repository.get_competition_by_name(db, name=competition.name)
     if db_competition:
         raise HTTPException(status_code=400, detail="Competition already Exists, Use put for updating")
     else:
         return repository.create_competition(db=db, competition=competition)
 
-@app.put("/competitions/", response_model=schemas.Competition)
-def update_competition(competition: schemas.Competition,db: Session = Depends(get_db)):
-    db_competition = repository.get_competition_by_name(db, name=competition.name)
-    if db_competition:
-        return repository.update_competition(db=db, competition = competition)
-    else:
-        raise HTTPException(status_code=400, detail="Competition doesn't Exists")
 
-
-@app.get("/competition/{competition_id}", response_model=schemas.Competition)
-def get_competition(competition_id: str, db: Session = Depends(get_db)):
-    competition = repository.get_competition_by_id(db, competition_id)
+@app.get("/competitions/{competition_id}", response_model=schemas.Competition)
+def get_competition(competition_id: int, db: Session = Depends(get_db)):
+    competition = repository.get_competition(db, competition_id)
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
     return competition
 
 
-@app.delete("/competition/{competition_id}", response_model=schemas.Competition)
-def delete_match(competition_id: str, db: Session = Depends(get_db)):
-    competition = repository.get_match_by_id(db, competition_id)
+@app.delete("/competitions/{competition_id}", response_model=schemas.Competition)
+def delete_match(competition_id: int, db: Session = Depends(get_db)):
+    competition = repository.get_match(db, competition_id)
     if competition:
-        repository.delete_competition(db=db, competition=competition)
+        repository.delete_competition(db=db, competition_id=competition_id)
         return competition
     else:
         raise HTTPException(status_code=400, detail="Competition not found")
-@app.get("/competition/{competition_name}", summary="Get details of competition given its name", response_model=schemas.Competition)
+
+
+@app.get("/competitions/{competition_name}", summary="Get details of competition given its name",
+         response_model=schemas.Competition)
 def read_competition(competition_name: str, db: Session = Depends(get_db)):
     competition = repository.get_competition_by_name(db, competition_name)
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
     return competition
 
-@app.delete("/competition/{competition_name}", response_model=schemas.Competition)
-def delete_competition(competition_name: str,db: Session = Depends(get_db)):
-    competition = repository.get_competition_by_name(db, name=competition_name)
+
+@app.delete("/competitions/{competition_id}", response_model=schemas.Competition)
+def delete_competition(competition_id: int, db: Session = Depends(get_db)):
+    competition = repository.get_competition(db, competition_id=competition_id)
     if competition:
-        repository.delete_competition(db=db, competition = competition)
+        repository.delete_competition(db=db, competition_id=competition.id)
         return competition
     else:
         raise HTTPException(status_code=400, detail="Competition not found")
 
 
-@app.put("/competition/{competition_name}", summary="Update competition given its id and updated data", response_model=schemas.Competition)
-def update_competition(competition_name: str, competition: schemas.CompetitionCreate, db: Session = Depends(get_db)):
-    db_competition = repository.get_competition_by_name(db, competition_name)
+# actualitzar una competició amb un cert id
+@app.put("/competitions/{competition_name}", response_model=schemas.Competition)
+def update_competition(competition_name: str, competition: schemas.Competition, db: Session = Depends(get_db)):
+    db_competition = repository.get_competition_by_name(db=db, name=competition_name)
     if not db_competition:
-        return create_competition(db, competition)
-    #Competition names aren't unique according to the given code in models.py, but a mandatory method uses a search of competition by name, so it must be unique
-    competition_with_updated_name = repository.get_competition_by_name(db, competition.name)
-    if competition_with_updated_name != db_competition: #Check that there isn't another competition with the same name we are updating
-        raise HTTPException(status_code=400, detail="Competition name already in use")
-    return repository.update_competition(db, db_competition.id, competition)
+        raise HTTPException(status_code=404, detail="Competition not found")
+    updated_competition = repository.update_competition(db=db, competition_id=db_competition.id,
+                                                        competition=competition)
+    return updated_competition
 
-#GET /teams/{team_name}/competitions: retorna totes les competicions d'un equip, donat el seu nom.
-@app.get("/teams/{team_name}/competitions", summary="Get competitions of a team given its name", response_model=list[schemas.Competition])
-def read_competitions_of_team(team_name: str, db: Session = Depends(get_db)):
-    team = repository.get_team_by_name(db, team_name)
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-    return repository.get_competitions_by_team(db, team.id)
 
-#GET /matches/{match_id}/competition: retorna la competició d'un partit, donat el seu id.
-@app.get("/matches/{match_id}/competition", summary="Get competition of a game given its id", response_model=schemas.Competition)
-def read_competitions_of_match(match_id: int, db: Session = Depends(get_db)):
-    match = repository.get_match(db, match_id)
-    if not match:
-        raise HTTPException(status_code=404, detail="Match not found")
-    return repository.get_competition_by_match(db, match_id)
+# retorna tots els partits d'una competició, donada el seu nom.
+@app.get("/competitions/{competition_name}/matches", response_model=List[schemas.Competition])
+def get_matches_competition(competition_name: str, db: Session = Depends(get_db)):
+    competition = repository.get_competition_by_name(db, name=competition_name)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    matches = repository.get_matches_competition(db=db, competition_name=competition.name)
+    return matches
+
+
+# retorna tots els equips d'una competició, donada el seu nom.
+@app.get("/competitions/{competition_name}/teams", response_model=List[schemas.Competition])
+def get_teams_competition(competition_name: str, db: Session = Depends(get_db)):
+    competition = repository.get_competition_by_name(db, name=competition_name)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    teams = repository.get_teams_competition(db=db, competition_name=competition.name)
+    return teams
 
 
 ###########
@@ -202,235 +251,201 @@ def read_competitions_of_match(match_id: int, db: Session = Depends(get_db)):
 @app.get("/matches/", summary="Get matches with id from skip to skip+limit", response_model=list[schemas.Match])
 def read_matches(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return repository.get_matches(db, skip=skip, limit=limit)
-@app.post("/matches/", summary="Create new match", response_model=schemas.Match)
+
+
+@app.post("/matches/", response_model=schemas.Match)
 def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
-    db_match = repository.get_match(db, match.id)
-    if db_match:
-        raise HTTPException(status_code=400, detail="Match already exists, use put for updating")
-    return repository.create_match(db, match)
+    # Verificar que ambos equipos existen
+    local_team = repository.get_team(db, match.local.id)
+    if local_team is None:
+        raise HTTPException(status_code=404, detail="Local team not found")
 
-@app.put("/matches/", response_model=schemas.Match)
-def update_match(match: schemas.Match,db: Session = Depends(get_db)):
-    db_match = repository.get_match_by_team(db= db,  team_l=match.local, team_v=match.visitor)
-    if db_match:
-        return repository.update_match(db=db, match = match)
-    else:
-        raise HTTPException(status_code=400, detail="Match doesn't Exists")
+    visitor_team = repository.get_team(db, match.visitor.id)
+    if visitor_team is None:
+        raise HTTPException(status_code=404, detail="Visitor team not found")
 
-@app.get("/match/{match_id}", summary="Get details of match with id match_id", response_model=schemas.Match)
+    db_match = repository.create_match(db=db, match=match)
+
+    return db_match
+
+
+@app.get("/matches/{match_id}", summary="Get details of match with id match_id", response_model=schemas.Match)
 def read_match(match_id: int, db: Session = Depends(get_db)):
     match = repository.get_match(db, match_id)
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
     return match
 
-#GET /teams/{team_name}/matches: retorna tots els partits d'un equip, donat el seu nom.
-@app.get("/teams/{team_name}/matches", summary="Get matches of a team given its name", response_model=list[schemas.Match])
-def read_matches_of_team(team_name: str, db: Session = Depends(get_db)):
-    team = repository.get_team_by_name(db, team_name)
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-    return repository.get_matches_by_team(db, team.id)
 
-#GET /competitions/{competition_name}/matches: retorna tots els partits d'una competició, donada el seu nom.
-@app.get("/competitions/{competition_name}/matches", summary="Get matches of a competition given its name", response_model=list[schemas.Match])
-def read_matches_of_competition(competition_name: str, db: Session = Depends(get_db)):
-    competition = repository.get_competition_by_name(db, competition_name)
-    if not competition:
-        raise HTTPException(status_code=404, detail="Competition not found")
-    return repository.get_matches_by_competition(db, competition.id)
+@app.get("/matches/{match_date}", response_model=List[schemas.Match])
+def read_matches_by_date(date: str, db: Session = Depends(get_db)):
+    matches = repository.get_matches_by_date(db, date=date)
+    if not matches:
+        raise HTTPException(status_code=404, detail="No matches found for this date")
+    return matches
 
-@app.get("/match/{match_id}", response_model=schemas.Match)
-def get_match(match_id: str,db: Session = Depends(get_db)):
-    match = repository.get_match_by_id(db, match_id)
-    if not match:
-        raise HTTPException(status_code=404, detail="Match whith teams not found")
-    return match
 
-@app.delete("/match/{match_id}", summary="Delete match with id match_id", response_model=schemas.Match)
+# Actualitzem un match amb un cert id
+@app.delete("/matches/{match_id}", response_model=schemas.Match)
 def delete_match(match_id: int, db: Session = Depends(get_db)):
-    match = repository.get_match(db, match_id)
+    match = repository.get_match(db, match_id=match_id)
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
-    return repository.delete_match(db, match.id)
+    repository.delete_match(db=db, match_id=match_id)
+    return {"message": f"Match {match_id} has been deleted successfully."}
 
-@app.put("/match/{match_id}", summary="Update new match with id match_id, with data on match", response_model=schemas.Match)
+
+@app.put("/matches/{match_id}", response_model=schemas.Match)
 def update_match(match_id: int, match: schemas.MatchCreate, db: Session = Depends(get_db)):
-    db_match = repository.get_match(db, match_id)
+    db_match = repository.get_match(db=db, match_id=match_id)
     if not db_match:
-        return create_match(db, match)
-    return repository.update_match(db, db_match.id, match)
+        raise HTTPException(status_code=404, detail="Match not found")
+    updated_match = repository.update_match(db=db, match_id=match_id, match=match)
+    return updated_match
+
+
+# retorna l'equip local i visitant d'un partit, donat el seu id.
+@app.get("/matches/{match_id}/teams", response_model=List[schemas.Match])
+def get_teams_match(match_id: int, db: Session = Depends(get_db)):
+    db_match = repository.get_match(db=db, match_id=match_id)
+    if not db_match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    teams = repository.get_teams_match(db=db, match_id=match_id)
+    return teams
+
+
+# retorna la competició d'un partit, donat el seu id.
+@app.get("/matches/{match_id}/competition", response_model=schemas.Competition)
+def get_competition_match(match_id: int, db: Session = Depends(get_db)):
+    db_match = repository.get_match(db=db, match_id=match_id)
+    if not db_match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    competition = repository.get_competition_match(db=db, match_id=db_match.id)
+    return competition
+
 
 ##########
-# ORDERS #
+# ORDERS AND ACCOUNT#
 ##########
+@app.get('/orders/{username}', response_model=List[schemas.Order])
+def get_orders_by_username(username: str, db: Session = Depends(get_db)):
+    orders = repository.get_orders_by_username(db, username=username)
+    if not orders:
+        raise HTTPException(status_code=404, detail="Orders not found")
+    return orders
 
-@app.get('/orders/{username}', response_model=schemas.Order)
-def get_ordre(user_name: str,db: Session = Depends(get_db)):
-    ordre = repository.get_order_by_name(db, name=user_name)
-    if not ordre:
-        raise HTTPException(status_code=404, detail="Order not found")
-    return ordre
 
-@app.post('/orders/{username}', response_model=schemas.Order)
-def create_order(order: schemas.OrderCreate,db: Session = Depends(get_db)):
-    db_order = repository.get_order_by_match(db, match=order.match_id)
-    if db_order:
-        raise HTTPException(status_code=400, detail="Order with this match already Exists")
+# @app.post('/account', response_model=schemas.Account)
+# def create_account(account: schemas.AccountCreate,db: Session = Depends(get_db)):
+#     db_account = repository.get_account_by_username(db, username=account.username)
+#     if db_account:
+#         raise HTTPException(status_code=400, detail="Team already Exists, Use put for updating")
+#     else:
+#         return repository.create_account(db=db, account=account)
+#
+
+
+@app.post('/account', summary="Create new user", response_model=schemas.Account)
+def create_user(data: schemas.AccountCreate, db: Session = Depends(get_db)):
+    db_account = repository.get_account_by_username(db, username=data.username)
+    if db_account:
+        raise HTTPException(status_code=404, detail="Account already exists, use PUT for updating")
     else:
-        order = repository.create_order(db=db, order=order)
-        if order == "No":
-            raise HTTPException(status_code=400,
-                                detail="Order no completada, comprova si tens suficient diners o si hi ha suficients entrades")
+        account_data = {
+            'username': data.username,
+            'password': get_hashed_password(data.password),
+            'available_money': data.available_money,
+            'is_admin': data.is_admin,
+            'orders': data.orders
+        }
+        return repository.create_account(db=db, account=account_data)
 
-        elif order == "Error":
-            raise HTTPException(status_code=500,
-                                detail="Error al guardar a la base de dades")
-        else:
-            return order
 
-@app.get('/orders', response_model=list[schemas.Order])
-def read_orders(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+@app.get('/orders', response_model=List[schemas.Order])
+def get_orders(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return repository.get_orders(db, skip=skip, limit=limit)
 
-############
-# ACCOUNTS #
-############
-"""
-@app.get('/account', summary='Get details of currently logged in user', response_model=schemas.SystemAccount)
-async def get_me(user: schemas.SystemAccount = Depends(dependencies.get_current_user)):
-    return user
-"""
-#obtenir informació del compte amb un nom d'usuari
+
+@app.post('/orders/{username}', response_model=schemas.Order)
+def create_orders_by_username(username: str, order: schemas.OrderCreate, db: Session = Depends(get_db)):
+    # db_orders = repository.get_orders_by_username(db, username=username)
+    # if db_orders:
+    #     raise HTTPException(status_code=400, detail="Order already exists. Use PUT to update.")
+    # else:
+    return repository.create_orders(db=db, username=username, order=order)
+
+
+@app.get('/accounts', response_model=List[schemas.Account])
+def get_accounts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    # protegir endpoint
+    # current_user = get_current_user(settings=Depends(get_settings()), db=db, token=Depends(reuseable_oauth))
+    # if current_user.is_admin == 1:
+    return repository.get_accounts(db, skip=skip, limit=limit)
+
+
 @app.get('/account/{username}', response_model=schemas.Account)
-def read_account(username: str, db: Session = Depends(get_db)):
-    account = repository.get_account_by_username(db, username)
+def get_account_by_usename(username: str, db: Session = Depends(get_db)):
+    account = repository.get_account_by_username(db, username=username)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     return account
 
-#obtenir informació sobre tots els comptes
-@app.get('/accounts')
-def read_accounts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
-    return repository.get_accounts(db, skip=skip, limit=limit)
 
-#creeu un compte nou passant `username` i `password' Utilitzeu `hash_ password` quan creeu un compte (primer heu de crear un usuari nou i després afegir una contrasenya hash mitjançant el mètode `.hash_ password (password)`).
-@app.post('/account', response_model=schemas.Account)
-def create_account(account: schemas.AccountCreate,db: Session = Depends(get_db)):
-    db_account = repository.get_account_by_name(db, name=account.username)
-    if db_account:
-        raise HTTPException(status_code=400, detail="User already Exists, Use put for updating")
-    else:
-        return repository.create_account(db=db, account=account)
-
-#suprimiu un compte relacionat amb un nom d'usuari (recordeu també suprimir totes les comandes relacionades).
-@app.delete('/account/{username}')
-def delete_account(account_name: str, db: Session = Depends(get_db)):
-    account = repository.get_account_by_name(db, account_name)
+@app.delete('/account/{username}', response_model=dict)
+def delete_account(username: str, db: Session = Depends(get_db)):
+    account = repository.get_account_by_username(db, username=username)
     if not account:
-        raise HTTPException(status_code=404, detail="account not found")
-    return repository.delete_account(db, account.id)
+        raise HTTPException(status_code=404, detail="Account not found")
+    repository.delete_account(db=db, username=username)
+    return {"message": f"{account.username} has been deleted successfully."}
 
-#actualitzeu la informació del compte amb un nom d'usuari
-@app.put('/account/{username}')
-def update_account(account_name: str, account: schemas.AccountCreate, db: Session = Depends(get_db)):
-    db_account = repository.get_account_by_name(db, account_name)
-    if not db_account:
-        return create_account(db, account)
-    account_with_updated_name = repository.get_account_by_name(db, account.name)
-    if account_with_updated_name != db_account: #Check that there isn't another account with the same name we are updating
-        raise HTTPException(status_code=400, detail="account name already in use")
-    return repository.update_account(db, db_account.id, account)
 
-"""
-##########
-# TOKENS #
-##########
+@app.put('/account/{username}', response_model=schemas.Account)
+def update_account(username: str, acc: schemas.Account, db: Session = Depends(get_db)):
+    account = repository.get_account_by_username(db=db, username=username)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    updated_account = repository.update_account(db=db, username=username, acc=acc)
+    return updated_account
+
+
 @app.post('/login', summary="Create access and refresh tokens for user", response_model=schemas.TokenSchema)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-   username = form_data.username
-   password = form_data.password
-   db_account = repository.get_account_by_name(db, username)
-   if not db_account:
-       raise HTTPException(status_code=400, detail="account doesn´t exist")
-   if not verify_password(password, db_account.password):
-       raise HTTPException(status_code=400, detail="passwordn't")
-   return{
-        "access_token": utils.create_access_token(db_account.username),
-        "refresh_token": utils.create_refresh_token(db_account.username),
-}
-"""
-#TODO optional
-#Protegiu tots els endpoints perquè només puguin ser accedits per usuaris registrats. Deixeu només els gets que no tinguin informació sensible (p.ex compte d'usuari, comandes, etc) com a públics.
-#Modifiqueu la dependència per tal que si un usuari és admin pugui accedir a tots els endpoints.
-"""def test_create_match():
-    competition = {
-        "name": "Test Barça",
-        "category": "Senior",
-        "sport": "Football"
-    }
-    local = {
-        "name": "Barça",
-        "country": "Spain"
-    }
-    visitor = {
-        "name": "Madrid",
-        "country": "Spain"
-    }
-    match = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "price": 100.00,
-        "local": local,
-        "visitor": visitor,
-        "competition": competition,
-        "total_available_tickets": 100,
+    username = form_data.username
+    print("Dintre login mayn.py")
+    print(username)
+    password = form_data.password
+    # get user from database
+    user = repository.get_account_by_username(db, username)
+    print(password, user)
+    # if user does not exist, raise an exception
+    if not user:
+        print("not user")
+        raise HTTPException(status_code=404, detail="User not found")
+    # if user exist, verify password using verify_password function
+    else:
+        print("yes user")
+        pwd = verify_password(password, user.password)
+        print(pwd)
 
-    }
-    @app.post("/teams/", json=local)
-    @app.post("/teams/", json=visitor)
-    @app.post("/competitions/", json=competition)
-    @app.post("/matches/", json=match)
+        # pwd = verify_password(password, get_hashed_password(password))
 
-    local1 = {
-        "name": "UD Las Palmas",
-        "country": "Spain"
-    }
-    visitor1 = {
-        "name": "Atletico de Madrid",
-        "country": "Spain"
-    }
-    match1 = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "price": 60.00,
-        "local": local1,
-        "visitor": visitor1,
-        "competition": competition,
-        "total_available_tickets": 100,
+        # if password is not correct, raise an exception
+        if not pwd:
+            print("not pwd")
 
-    }
-    @app.post("/teams/", json=local1)
-    @app.post("/teams/", json=visitor1)
-    @app.post("/competitions/", json=competition)
-    @app.post("/matches/", json=match1)
+            raise HTTPException(status_code=400, detail="Incorrect Password")
 
-    local2 = {
-        "name": "Espanyol",
-        "country": "Spain"
-    }
-    visitor2 = {
-        "name": "Tenerife",
-        "country": "Spain"
-    }
-    match2 = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "price": 3.00,
-        "local": local2,
-        "visitor": visitor2,
-        "competition": competition,
-        "total_available_tickets": 50,
+        # if password is correct, create access and refresh tokens and return them
+        else:
+            print("Dintre else")
 
-    }
-    @app.post("/teams/", json=local2)
-    @app.post("/teams/", json=visitor2)
-    @app.post("/competitions/", json=competition)
-    @app.post("/matches/", json=match2)"""
+            return {
+                "access_token": create_access_token(user.username),
+                "refresh_token": create_refresh_token(user.username),
+            }
+
+
+@app.get('/account', summary='Get details of currently logged in user', response_model=SystemAccount)
+def get_me(user: SystemAccount = Depends(get_current_user)):
+    return user

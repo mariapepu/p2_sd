@@ -1,19 +1,42 @@
-from sqlalchemy import Boolean, Column, create_engine, Date, DateTime, Enum, Float, ForeignKey, Integer, MetaData, String, Table, UniqueConstraint
+from sqlalchemy import Boolean, Column, create_engine, Date, DateTime, Enum, Float, ForeignKey, Integer, MetaData, \
+    String, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
-
 from database import Base
+import enum
 
-categories_list = ("Senior", "Junior")
-sports_list = ("Volleyball", "Football", "Basketball", "Futsal")
-teams_in_competitions = Table("teams_in_competitions", Base.metadata, Column("id", Integer, primary_key=True), Column("team_id", Integer, ForeignKey("teams.id")), Column("competition_id", Integer, ForeignKey("competitions.id")))
+
+class Category(str, enum.Enum):
+    Senior = "Senior"
+    Junior = "Junior"
+    Professional = "Professional"
+
+
+class Sports(str, enum.Enum):
+    Volleyball = "Volleyball"
+    Football = "Football"
+    Futsal = "Futsal"
+    Basketball = "Basketball"
+    Tennis = "Tennis"
+
+
+# categories_list = ("Senior","Junior")
+# sports_list = ("Volleyball","Football")
+categories_list = (Category)
+sports_list = (Sports)
+teams_in_competitions = Table("teams_in_competitions", Base.metadata,
+                              Column("id", Integer, primary_key=True),
+                              Column("team_id", Integer, ForeignKey("teams.id")),
+                              Column("competition_id", Integer, ForeignKey("competitions.id")))
+
 
 class Team(Base):
-    __tablename__ = 'teams' #This is table name
+    __tablename__ = 'teams'  # This is table name
 
     id = Column(Integer, primary_key=True)
     name = Column(String(30), unique=True, nullable=False, index=True)
     country = Column(String(30), nullable=False)
     description = Column(String(100))
+
 
 class Competition(Base):
     __tablename__ = 'competitions'  # This is table name
@@ -24,13 +47,16 @@ class Competition(Base):
     category = Column(Enum(*categories_list), nullable=False)
     sport = Column(Enum(*sports_list), nullable=False)
     teams = relationship("Team", secondary=teams_in_competitions, backref="competitions")
+    match = relationship("Match", backref="competitions")
+
 
 class Match(Base):
-    __tablename__ = 'matches' #This is table name
+    __tablename__ = 'matches'  # This is table name
     __table_args__ = (UniqueConstraint('local_id', 'visitor_id', 'competition_id', 'date'),)
 
     id = Column(Integer, primary_key=True)
-    date = Column(DateTime, nullable=False) #date = Column(Date, nullable=False) #codi original: import Date // Column(DateTime)
+    date = Column(DateTime,
+                  nullable=False)  # date = Column(Date, nullable=False) #codi original: import Date // Column(DateTime)
     price = Column(Float, nullable=False)
     competition_id = Column(Integer, ForeignKey("competitions.id"), nullable=False)
     competition = relationship("Competition", backref="matches")
@@ -40,9 +66,10 @@ class Match(Base):
     local = relationship("Team", foreign_keys=local_id)
     visitor = relationship("Team", foreign_keys=visitor_id)
     total_available_tickets = Column(Integer)
-    #Finalment, afegiu un camp nou total_available_tickets al model de Match
+    # Finalment, afegiu un camp nou total_available_tickets al model de Match
     # que per defecte sigui el nombre de localitats del lloc on s'està fent
     # i feu les actualitzacions necessàries al constructor.
+
 
 class Account(Base):
     __tablename__ = 'accounts'
@@ -58,6 +85,8 @@ class Account(Base):
         self.username = username
         self.available_money = available_money
         self.is_admin = is_admin
+        self.password = "test"
+
 
 class Order(Base):
     __tablename__ = 'orders'
@@ -70,3 +99,15 @@ class Order(Base):
     def __init__(self, match_id, tickets_bought):
         self.match_id = match_id
         self.tickets_bought = tickets_bought
+
+
+class Parent(Base):
+    __tablename__ = 'parent'
+    id = Column(Integer, primary_key=True)
+    child_id = Column(Integer, ForeignKey('child.id'))
+    child = relationship("Child")
+
+
+class Child(Base):
+    __tablename__ = 'child'
+    id = Column(Integer, primary_key=True)
