@@ -6,16 +6,15 @@
         <div class="icon-button-container">
             <img src="https://www.citypng.com/public/uploads/small/11639594360nclmllzpmer2dvmrgsojcin90qmnuloytwrcohikyurvuyfzvhxeeaveigoiajks5w2nytyfpix678beyh4ykhgvmhkv3r3yj5hi.png" alt="Person Icon" width="24" height="24" style="margin-right: 2px;" class="mb-1">
             <span class="spanText" style="margin-right: 13px;">
-              {{  this.$route.query.username === undefined ? 'test' : this.$route.query.username }}
+              {{  this.$route.query.username === undefined ? '' : this.$route.query.username }}
             </span>
             <img src="https://png.pngtree.com/png-vector/20191128/ourmid/pngtree-coin-money-icon-png-image_2049478.jpg" alt="Money Icon" width="25" height="25" style="margin-right: 2px;">
             <span class="spanText" style="margin-right: 13px;">
-              {{this.$route.query.username === undefined ? '50.75$' : '200$'}}
+              {{this.$route.query.username === undefined ? '- €' : this.available_money + ' €'}}
             </span>
             <button class="btn-vc header-btn" @click="is_showing_cart = !is_showing_cart">Veure cistella
           <div class="svg-wrapper-1">
             <div class="svg-wrapper">
-              <!--aqui iria el icono-->
               <div v-if="is_showing_cart" class="closebox"></div>
             </div>
           </div>
@@ -130,9 +129,9 @@ export default {
       message: 'Sport Matches',
       user: this.username,
       tickets_bought: 0,
-      remaining_tickets: 15,
-      money_available: 100,
-      price_match: 10,
+      // remaining_tickets: 0,
+      available_money: 0,
+      // price_match: 0,
       is_showing_cart: false,
       matches_added: [],
       creatingAccount: false,
@@ -147,14 +146,13 @@ export default {
       matches: []
     }
   },
-  created () {
+  async created () {
     this.getMatches()
     this.logged = this.$route.query.logged === 'true'
     this.username = this.$route.query.username
-    console.log(this.$route)
-    console.log(this.$route.query)
-    console.log(this.$route.query.username)
     this.token = this.$route.query.token
+    await this.updateAvailableMoney()
+    console.log(this.available_money)
     if (this.logged === undefined) {
       this.logged = false
     }
@@ -163,7 +161,7 @@ export default {
   computed: {
     // eslint-disable-next-line vue/no-dupe-keys
     totalTickets () {
-      return this.matches_added.reduce((total, match) => total + match.ticketCount, 0)
+      return this.matches_added.reduce((total, match) => total + match.tickets_bought, 0)
     }
   },
   methods: {
@@ -186,79 +184,75 @@ export default {
         this.matches_added.push(eventAdded)
       }
     },
+    addEventToCart2 (match) {
+      const existingMatch = this.matches_added.find((addedMatch) => addedMatch.id === match.id)
+      if (!existingMatch) {
+        match.ticketCount = 1
+        this.totalTickets += 1
+        this.matches_added.push(match)
+      }
+    },
     deleteEvent (event) {
       this.matches_added.splice(event, 1)
     },
-    buyTicket () {
-      this.tickets_bought += 1
-    },
-    finalizePurchase () {
+    finalizePurchase: function () {
       console.log('Finalize Purchase clicked')
       for (let i = 0; i < this.matches_added.length; i += 1) {
+        var matchValue = this.matches_added[i].match
         const parameters = {
-          match_id: this.matches_added[i].id,
-          tickets_bought: this.matches_added[i].ticketCount
+          match_id: matchValue.id,
+          tickets_bought: this.matches_added[i].quantity
         }
+        console.log(parameters)
         this.addPurchase(parameters)
       }
+      alert('Compra realitzada amb exit!')
     },
     addPurchase (parameters) {
       console.log('addPurchase achieved')
-      // const path = 'http://localhost:8000/orders/maria'
-      // 5.5 seguretat (no va)
-      const path = 'http://localhost:8000/orders/' + this.username
-      const config = {
+      // 5.5 seguretat
+      const path = 'http://127.0.0.1:8000/orders/' + this.username
+      /* const config = {
         headers: {
           Authorization: 'Bearer ' + this.token
         }
-      }
-      axios.post(path, parameters, config)
+      } */
+      // axios.post(path, parameters, config)
       axios.post(path, parameters)
         .then(() => {
           console.log('Order done')
-          this.matches_added.splice(0)
+          /* this.matches_added.splice(0)
           this.matches_added = []
-          this.showCart = !this.showCart
+          this.showCart = !this.showCart */
         })
         .catch((error) => {
           // eslint-disable-next-line
           console.log(error)
-          this.getMatches()
+          // this.getMatches()
         })
     },
     getMatches () {
       const pathMatches = 'http://127.0.0.1:8000/matches/'
-      const pathCompetition = 'http://127.0.0.1:8000/competitions/'
-
       axios.get(pathMatches)
         .then((res) => {
-          var matches = res.data.filter((match) => {
-            return match.competition.name != null
-          })
-          var promises = []
-          for (let i = 0; i < matches.length; i++) {
-            const promise = axios.get(pathCompetition + matches[i].competition.name)
-              .then((resCompetition) => {
-                delete matches[i].competition.name
-                matches[i].competition = {
-                  'name': resCompetition.data.competition.name,
-                  'category': resCompetition.data.competition.category,
-                  'sport': resCompetition.data.competition.sport
-                }
-                matches[i].total_available_tickets = resCompetition.data.total_available_tickets
-              })
-              .catch((error) => {
-                console.error(error)
-              })
-            promises.push(promise)
-          }
-          Promise.all(promises).then((_) => {
-            this.matches = matches
+          this.matches = res.data.filter((match) => {
+            return match !== null
           })
         })
         .catch((error) => {
           console.error(error)
         })
+    },
+    async updateAvailableMoney () {
+      try {
+        const path = 'http://127.0.0.1:8000/account/' + this.username
+        const res = await axios.get(path)
+        this.available_money = res.data.available_money
+        console.log(this.available_money)
+      } catch (error) {
+        console.error(error)
+        // Handle the error here
+      }
     }
   }
 }

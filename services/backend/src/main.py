@@ -81,7 +81,7 @@ async def get_current_user(settings: utils.Settings = Depends(get_settings),
     user = db.query(models.Account).filter(models.Account.username == username).first()
     # if user does not exist, raise an exception
     if not user:
-        raise HTTPException(status_code = 400, detail = "User doesn't exist, use Sign In to create one")
+        raise HTTPException(status_code=400, detail="User doesn't exist, use Sign In to create one")
     # if user exist, return user Schema with password hashed
     else:
         return SystemAccount(**user)
@@ -240,6 +240,7 @@ def get_teams_competition(competition_name: str, db: Session = Depends(get_db)):
 def read_matches(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return repository.get_matches(db, skip=skip, limit=limit)
 
+
 @app.post("/matches/", response_model=schemas.Match)
 def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
     # Verificar que ambos equipos existen
@@ -320,16 +321,6 @@ def get_orders_by_username(username: str, db: Session = Depends(get_db)):
     return orders
 
 
-# @app.post('/account', response_model=schemas.Account)
-# def create_account(account: schemas.AccountCreate,db: Session = Depends(get_db)):
-#     db_account = repository.get_account_by_username(db, username=account.username)
-#     if db_account:
-#         raise HTTPException(status_code=400, detail="Team already Exists, Use put for updating")
-#     else:
-#         return repository.create_account(db=db, account=account)
-#
-
-
 @app.post('/account', summary="Create new user", response_model=schemas.Account)
 def create_user(data: schemas.AccountCreate, db: Session = Depends(get_db)):
     db_account = repository.get_account_by_username(db, username=data.username)
@@ -353,18 +344,11 @@ def get_orders(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
 
 @app.post('/orders/{username}', response_model=schemas.Order)
 def create_orders_by_username(username: str, order: schemas.OrderCreate, db: Session = Depends(get_db)):
-    # db_orders = repository.get_orders_by_username(db, username=username)
-    # if db_orders:
-    #     raise HTTPException(status_code=400, detail="Order already exists. Use PUT to update.")
-    # else:
     return repository.create_orders(db=db, username=username, order=order)
 
 
 @app.get('/accounts', response_model=List[schemas.Account])
 def get_accounts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    # protegir endpoint
-    # current_user = get_current_user(settings=Depends(get_settings()), db=db, token=Depends(reuseable_oauth))
-    # if current_user.is_admin == 1:
     return repository.get_accounts(db, skip=skip, limit=limit)
 
 
@@ -412,19 +396,11 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         print("yes user")
         pwd = verify_password(password, user.password)
         print(pwd)
-
-        # pwd = verify_password(password, get_hashed_password(password))
-
-        # if password is not correct, raise an exception
         if not pwd:
             print("not pwd")
-
             raise HTTPException(status_code=400, detail="Incorrect Password")
-
-        # if password is correct, create access and refresh tokens and return them
         else:
             print("Dintre else")
-
             return {
                 "access_token": create_access_token(user.username),
                 "refresh_token": create_refresh_token(user.username),

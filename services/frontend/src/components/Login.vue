@@ -34,7 +34,7 @@
           :style="{ color: password === '' ? '#999999' : '' }"
         />
           </div>
-          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="button" @click="signIn">Iniciar sessió</button>
+          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="button" @click="checkLogin">Iniciar sessió</button>
           <button class="btn btn-add" style="margin-top: 2%; width: 100%; font-weight: normal;" type="button"
                   @click="ini_crear = !ini_crear">Crear Compte
           </button>
@@ -104,45 +104,11 @@ export default {
     }
   },
   methods: {
-    /* checkRegister () {
-      axios.post('http://127.0.0.1:8000/account?username=' + this.createUsername + '&password=' + this.createPassword)
-        .then(function (response) {
-          window.location.href = 'http://127.0.0.1:8000/'
-        })
-        // eslint-disable-next-line handle-callback-err
-        .catch(function (error) {
-          alert('Existing User')
-        })
-    },
-    checkLogin () {
-      const pathMatches2 = 'http://127.0.0.1:8000/account/maria'
-      console.log('path')
-      axios.get(pathMatches2)
-        .then((res) => {
-          console.log('then')
-          if (res.data) {
-            console.log(res.data)
-            window.location.href = 'http://127.0.0.1:8000/'
-          }
-        })
-        // eslint-disable-next-line handle-callback-err
-        .catch((error) => {
-          alert('Incorrect Credentials')
-        })
-    }, */
     atras () {
       this.$router.push({path: '/'})
     },
     created () {
       // this.getShows()
-    },
-    signIn () {
-      console.log('Sign In clicked')
-      this.checkLogin()
-    },
-    createAccount () {
-      this.create_acc = !this.create_acc
-      console.log('Create Account clicked')
     },
     checkLogin () {
       const formData = new FormData()
@@ -234,7 +200,6 @@ export default {
     },
     getAccount () {
       const path = 'http://127.0.0.1:8000/account/' + this.createUsername
-      // const path = 'http://127.0.0.1:8000/account/maria'
       const config = {
         headers: {
           Authorization: 'Bearer ' + this.token
@@ -243,13 +208,11 @@ export default {
       axios.get(path, config)
         .then((res) => {
           this.is_admin = res.data.is_admin
+          this.available_money = res.data.available_money
         })
         .catch((error) => {
           console.error(error)
         })
-    },
-    showForms () {
-      this.show = !this.show
     }
   }
 }
