@@ -10,8 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-# from fastapi.security import OAuth2PasswordBearer
-# from . import utils
 from jose import jwt
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -29,7 +27,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8080/"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

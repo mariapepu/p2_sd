@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     jwt_secret_key: str  # should be kept secret
     jwt_refresh_secret_key: str  # should be kept secret
+    # production: bool = True # set to true for production
+    production: bool = False  # default to False in case the environment variable isn't set
 
     class Config:
         env_file = ".env"

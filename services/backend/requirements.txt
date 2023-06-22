@@ -16,4 +16,4 @@ jwt
 PyJWT
 jose
 pycryptodome
-
+docker-compose

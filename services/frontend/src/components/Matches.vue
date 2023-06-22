@@ -209,9 +209,6 @@ export default {
       this.getMatches()
       window.location.reload()
     },
-    reloadPage () {
-      window.location.reload()
-    },
     addPurchase (parameters) {
       console.log('addPurchase achieved')
       const path = 'http://127.0.0.1:8000/orders/' + this.username
