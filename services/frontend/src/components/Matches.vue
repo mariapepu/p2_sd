@@ -3,7 +3,16 @@
     <div class="header">
       <h1> {{ message }} </h1>
       <div class="header-right">
-        <button class="btn-vc header-btn" @click="is_showing_cart = !is_showing_cart">Veure cistella
+        <div class="icon-button-container">
+            <img src="https://www.citypng.com/public/uploads/small/11639594360nclmllzpmer2dvmrgsojcin90qmnuloytwrcohikyurvuyfzvhxeeaveigoiajks5w2nytyfpix678beyh4ykhgvmhkv3r3yj5hi.png" alt="Person Icon" width="24" height="24" style="margin-right: 2px;" class="mb-1">
+            <span class="spanText" style="margin-right: 13px;">
+              {{  this.$route.query.username === undefined ? 'test' : this.$route.query.username }}
+            </span>
+            <img src="https://png.pngtree.com/png-vector/20191128/ourmid/pngtree-coin-money-icon-png-image_2049478.jpg" alt="Money Icon" width="25" height="25" style="margin-right: 2px;">
+            <span class="spanText" style="margin-right: 13px;">
+              {{this.$route.query.username === undefined ? '50.75$' : '200$'}}
+            </span>
+            <button class="btn-vc header-btn" @click="is_showing_cart = !is_showing_cart">Veure cistella
           <div class="svg-wrapper-1">
             <div class="svg-wrapper">
               <!--aqui iria el icono-->
@@ -11,7 +20,10 @@
             </div>
           </div>
         </button>
-        <button class="btn-vc header-btn" @click="login">Iniciar sessió</button>
+            <button class="btn button-secondary" @click="login">
+              {{this.$route.query.username === undefined ? 'Log In' : 'Log Out'}}
+            </button>
+          </div>
       </div>
     </div>
     <hr class="gradient">
@@ -49,7 +61,7 @@
                   <input :value=cart.quantity class="form-control text-center" max="10" min="0" readonly>
                   <span class="input-group-append">
                           <button class="btn-add btn btn-outline-secondary btn-number" data-type="plus" type="button"
-                                  v-on:click="cart.quantity += 1">
+                                  v-on:click="cart.quantity < cart.match.total_available_tickets ? cart.quantity += 1 :''">
                             +
                           </button>
                         </span>
@@ -67,7 +79,7 @@
             <button class="btn btn-secondary btn-group" type="button" @click="is_showing_cart = !is_showing_cart">
               Enrere
             </button>
-            <button class="btn btn-success btn-group" type="submit">Finalitza la compra</button>
+            <button class="btn btn-success btn-group" type="button" @click="finalizePurchase">Finalitza la compra</button>
           </div>
         </div>
         <div v-else>
@@ -76,7 +88,7 @@
             <button class="btn btn-secondary btn-group" type="button" @click="is_showing_cart = !is_showing_cart">
               Enrere
             </button>
-            <button class="btn btn-success btn-group disabled" style="cursor: not-allowed" type="submit">Finalitza la
+            <button class="btn btn-success btn-group disabled" style="cursor: not-allowed" type="button">Finalitza la
               compra
             </button>
           </div>
@@ -94,11 +106,10 @@
             </div>
             <img :src="cardImages[index]" alt="Card image" class="card-img">
             <div class="card-img-overlay card-body">
-              <h6><strong>{{ match.local.name }}</strong> ({{ match.local.country }}) <br>vs<br> <strong>{{
-                  match.visitor.name
-                }}</strong> ({{ match.visitor.country }})</h6>
-              <h6>{{ match.date.substring(0, 10) }}</h6>
-              <h6>{{ match.price }} &euro;</h6>
+              <h6><strong>{{ match.local.name }}</strong> ({{ match.local.country }}) vs <strong>{{ match.visitor.name }}</strong> ({{ match.visitor.country }})</h6>
+                      <h6>Data: {{ match.date.substring(0,10) }}</h6>
+                      <h6>Preu: {{ match.price }} &euro;</h6>
+                      <h6>Entrades disponibles: {{ match.total_available_tickets }}</h6>
               <button class="btn btn-success btn-lg card-btn" v-on:click="addEventToCart(match)">Afegeix a la cistella
               </button>
             </div>
@@ -124,7 +135,6 @@ export default {
       price_match: 10,
       is_showing_cart: false,
       matches_added: [],
-      matches: [],
       creatingAccount: false,
       is_admin: false,
       totalTickets: 0,
@@ -133,8 +143,22 @@ export default {
         'https://5corunafs.com/web2022/wp-content/uploads/2021/01/SAVE_20210121_074852-1-768x552.jpg',
         'https://5corunafs.com/web2022/wp-content/uploads/2021/01/SAVE_20210121_074852-1-768x552.jpg'
         // Agrega más URLs de imágenes según sea necesario
-      ]
+      ],
+      matches: []
     }
+  },
+  created () {
+    this.getMatches()
+    this.logged = this.$route.query.logged === 'true'
+    this.username = this.$route.query.username
+    console.log(this.$route)
+    console.log(this.$route.query)
+    console.log(this.$route.query.username)
+    this.token = this.$route.query.token
+    if (this.logged === undefined) {
+      this.logged = false
+    }
+    this.getAccount()
   },
   computed: {
     // eslint-disable-next-line vue/no-dupe-keys
@@ -168,9 +192,43 @@ export default {
     buyTicket () {
       this.tickets_bought += 1
     },
+    finalizePurchase () {
+      console.log('Finalize Purchase clicked')
+      for (let i = 0; i < this.matches_added.length; i += 1) {
+        const parameters = {
+          match_id: this.matches_added[i].id,
+          tickets_bought: this.matches_added[i].ticketCount
+        }
+        this.addPurchase(parameters)
+      }
+    },
+    addPurchase (parameters) {
+      console.log('addPurchase achieved')
+      // const path = 'http://localhost:8000/orders/maria'
+      // 5.5 seguretat (no va)
+      const path = 'http://localhost:8000/orders/' + this.username
+      const config = {
+        headers: {
+          Authorization: 'Bearer ' + this.token
+        }
+      }
+      axios.post(path, parameters, config)
+      axios.post(path, parameters)
+        .then(() => {
+          console.log('Order done')
+          this.matches_added.splice(0)
+          this.matches_added = []
+          this.showCart = !this.showCart
+        })
+        .catch((error) => {
+          // eslint-disable-next-line
+          console.log(error)
+          this.getMatches()
+        })
+    },
     getMatches () {
-      const pathMatches = 'http://localhost:8000/matches/'
-      const pathCompetition = 'http://localhost:8000/competitions/'
+      const pathMatches = 'http://127.0.0.1:8000/matches/'
+      const pathCompetition = 'http://127.0.0.1:8000/competitions/'
 
       axios.get(pathMatches)
         .then((res) => {
@@ -201,19 +259,6 @@ export default {
         .catch((error) => {
           console.error(error)
         })
-    },
-    created () {
-      this.getMatches()
-      this.logged = this.$route.query.logged === 'true'
-      this.username = this.$route.query.username
-      console.log(this.$route)
-      console.log(this.$route.query)
-      console.log(this.$route.query.username)
-      this.token = this.$route.query.token
-      if (this.logged === undefined) {
-        this.logged = false
-      }
-      this.getAccount()
     }
   }
 }

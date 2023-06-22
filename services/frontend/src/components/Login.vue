@@ -10,17 +10,31 @@
         <h4>Inicia sessió</h4>
         <form>
           <div class="form-label-group">
-            <label for="inputEmail">Username</label>
-            <input id="inputUsername" v-model="username" autofocus
-                   class="form-control" placeholder="Username" required type="username">
+            <label for="username">Username</label>
+        <input
+          type="text"
+          id="username"
+          v-model="username"
+          class="form-control"
+          placeholder="Username"
+          required autofocus
+          :style="{ color: username === '' ? '#999999' : '' }"
+        />
           </div>
           <div class="form-label-group">
             <br>
-            <label for="inputPassword">Password</label>
-            <input id="inputPassword" v-model="password" class="form-control"
-                   placeholder="Password" required type="password">
+             <label for="password">Password</label>
+        <input
+          type="password"
+          id="password"
+          v-model="password"
+          class="form-control"
+          placeholder="Password"
+          required
+          :style="{ color: password === '' ? '#999999' : '' }"
+        />
           </div>
-          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="submit">Iniciar sessió</button>
+          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="button" @click="signIn">Iniciar sessió</button>
           <button class="btn btn-add" style="margin-top: 2%; width: 100%; font-weight: normal;" type="button"
                   @click="ini_crear = !ini_crear">Crear Compte
           </button>
@@ -35,17 +49,31 @@
         <h4>Crea un compte</h4>
         <form>
           <div class="form-label-group">
-            <label for="inputEmail">Username</label>
-            <input id="inputUsername" v-model="username" autofocus
-                   class="form-control" placeholder="Username" required type="username">
+            <label for="create-username">Username</label>
+        <input
+          type="text"
+          id="create-username"
+          v-model="createUsername"
+          class="form-control"
+          placeholder="Username"
+          required
+          :style="{ color: addUserForm.username === '' ? '#999999' : '' }"
+        />
           </div>
           <div class="form-label-group">
             <br>
-            <label for="inputPassword">Password</label>
-            <input id="inputPassword" v-model="password" class="form-control"
-                   placeholder="Password" required type="password">
+            <label for="create-password">Password</label>
+        <input
+          type="password"
+          id="create-password"
+          v-model="createPassword"
+          class="form-control"
+          placeholder="Password"
+          required
+          :style="{ color: addUserForm.password === '' ? '#999999' : '' }"
+        />
           </div>
-          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="submit">Crear Compte</button>
+          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="button" @click="submitAccount">Crear Compte</button>
           <button class="btn btn-secondary" style="margin-top: 2%; width: 100%" type="button"
                   @click="ini_crear = !ini_crear">Tornar Iniciar sessió
           </button>
@@ -56,6 +84,7 @@
 </template>
 
 <script>
+import axios from 'axios'
 export default {
   data () {
     return {
@@ -64,16 +93,166 @@ export default {
       logged: false,
       username: null,
       password: null,
-      token: null
+      token: null,
+      createUsername: null,
+      createPassword: null,
+      addUserForm: {
+        username: this.createUsername,
+        password: this.createPassword
+      },
+      show: true
     }
   },
   methods: {
+    /* checkRegister () {
+      axios.post('http://127.0.0.1:8000/account?username=' + this.createUsername + '&password=' + this.createPassword)
+        .then(function (response) {
+          window.location.href = 'http://127.0.0.1:8000/'
+        })
+        // eslint-disable-next-line handle-callback-err
+        .catch(function (error) {
+          alert('Existing User')
+        })
+    },
+    checkLogin () {
+      const pathMatches2 = 'http://127.0.0.1:8000/account/maria'
+      console.log('path')
+      axios.get(pathMatches2)
+        .then((res) => {
+          console.log('then')
+          if (res.data) {
+            console.log(res.data)
+            window.location.href = 'http://127.0.0.1:8000/'
+          }
+        })
+        // eslint-disable-next-line handle-callback-err
+        .catch((error) => {
+          alert('Incorrect Credentials')
+        })
+    }, */
     atras () {
       this.$router.push({path: '/'})
+    },
+    created () {
+      // this.getShows()
+    },
+    signIn () {
+      console.log('Sign In clicked')
+      this.checkLogin()
+    },
+    createAccount () {
+      this.create_acc = !this.create_acc
+      console.log('Create Account clicked')
+    },
+    checkLogin () {
+      const formData = new FormData()
+      formData.append('username', this.username)
+      formData.append('password', this.password)
+      const parameters = 'username=' + encodeURIComponent(this.username) + '&password=' + encodeURIComponent(this.password)
+      console.log('Dintre CheckLogin')
+      console.log(this.username)
+      const config = {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+      const path = 'http://127.0.0.1:8000/login'
+      console.log('Checklogin comprobaciones:')
+      console.log(path)
+      console.log(parameters)
+      console.log(config)
+      axios.post(path, parameters, config)
+        .then((res) => {
+          console.log(parameters)
+          console.log('Dentro del .then')
+          this.logged = true
+          this.token = res.data.token
+          this.$router.push({
+            path: '/',
+            query: {username: this.username, logged: this.logged.toString(), token: this.token}
+          })
+        })
+        .catch((error) => {
+          console.error(error)
+          alert('Username or Password incorrect')
+        })
+    },
+    initCreateForm () {
+      this.creatingAccount = true
+      this.addUserForm.username = null
+      this.addUserForm.password = null
+    },
+    submitAccount () {
+      if (this.createUsername.length < 8) {
+        alert('La contrasseña ha de tenir com a mínim 8 caracters')
+      }
+      this.alertMessage = null
+      this.alertMessagePwd = null
+      this.addUserForm.username = this.createUsername
+      this.addUserForm.password = this.createPassword
+      console.log('Submit account clicked')
+      const parameters = {
+        username: this.createUsername,
+        password: this.createPassword,
+        available_money: 200.0,
+        is_admin: 1,
+        orders: []
+      }
+      this.postAccount(parameters)
+    },
+    postAccount (parameters) {
+      const path = 'http://127.0.0.1:8000/account'
+      // el post esta mal però no sé pq. le paso un
+      // schema de account idk pq no va
+      axios.post(path, parameters)
+        .then(() => {
+          alert('Account Created Successfully ')
+          this.onReset()
+          this.initCreateForm()
+          this.$router.push({
+            path: '/',
+            query: {username: parameters.username, logged: this.logged.toString(), token: this.token}
+          })
+        })
+        .catch((error) => {
+          console.log(error)
+          if (parameters.password.length > 24 || parameters.password.length < 8) {
+            this.alertMessagePwd = 'La contraseña tiene que tener entre 8 i 24 caracteres'
+          } else {
+            this.alertMessage = 'El usuario ya existe'
+          }
+        })
+    },
+    onReset () {
+      this.createUsername = null
+      this.createPassword = null
+      this.show = false
+      this.$nextTick(() => {
+        this.show = true
+      })
+      this.create_acc = !this.create_acc
+    },
+    getAccount () {
+      const path = 'http://127.0.0.1:8000/account/' + this.createUsername
+      // const path = 'http://127.0.0.1:8000/account/maria'
+      const config = {
+        headers: {
+          Authorization: 'Bearer ' + this.token
+        }
+      }
+      axios.get(path, config)
+        .then((res) => {
+          this.is_admin = res.data.is_admin
+        })
+        .catch((error) => {
+          console.error(error)
+        })
+    },
+    showForms () {
+      this.show = !this.show
     }
   }
 }
-
 </script>
 
 <style>
@@ -81,7 +260,6 @@ export default {
 .header {
   overflow: hidden;
   padding-top: 5%;
-//margin-bottom: 5%; padding-bottom: 2%; padding-left: 5%; padding-right: 5%; background-color: white;
 }
 
 .header > h1 {

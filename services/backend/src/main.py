@@ -1,32 +1,28 @@
-from fastapi import Depends, FastAPI, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy.sql.functions import user
-
-import repository, models, schemas, utils
-from schemas import SystemAccount
-from database import SessionLocal, engine
-from typing import List
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Request
-from fastapi.templating import Jinja2Templates
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import RedirectResponse
-from utils import verify_password, create_access_token, create_refresh_token, get_hashed_password
-
 # sessio5 imports
 # from typing import Union, Any
 from datetime import datetime
+from typing import List
 from fastapi import Depends, HTTPException, status
+from fastapi import FastAPI
+from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 # from fastapi.security import OAuth2PasswordBearer
 # from . import utils
 from jose import jwt
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
+import models
+import repository
+import schemas
+import utils
+from database import SessionLocal, engine
 from dependencies import get_settings, reuseable_oauth
 from schemas import TokenPayload, SystemAccount
-from fastapi.security import OAuth2PasswordBearer
+from utils import verify_password, create_access_token, create_refresh_token, get_hashed_password
 
 app = FastAPI()
 
@@ -244,27 +240,6 @@ def get_teams_competition(competition_name: str, db: Session = Depends(get_db)):
 def read_matches(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return repository.get_matches(db, skip=skip, limit=limit)
 
-
-"""@app.post("/matches/", response_model=schemas.Match)
-def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
-    # En principio se pueden repetir nomrbes, deberiamos controlar, que no haya un mismo equipo jugando el mismo date
-    db_match = repository.create_match(db=db, match=match)
-    return db_match"""
-
-"""@app.post("/matches/", response_model=schemas.Match)
-=======
-
-@app.post("/matches/", response_model=schemas.Match)
->>>>>>> 9680a673bfec7364bee0efeac63068ce73c8968e
-def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
-    # En principio se pueden repetir nomrbes, deberiamos controlar, que no haya un mismo equipo jugando el mismo date
-    print("antes de llamarlo")
-    db_match = repository.create_match(db=db, match=match)
-    print("despues de llamarlo")
-
-    return db_match"""
-
-
 @app.post("/matches/", response_model=schemas.Match)
 def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
     # Verificar que ambos equipos existen
@@ -422,7 +397,7 @@ def update_account(username: str, acc: schemas.Account, db: Session = Depends(ge
 @app.post('/login', summary="Create access and refresh tokens for user", response_model=schemas.TokenSchema)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     username = form_data.username
-    print("Dintre login mayn.py")
+    print("Dintre login main.py")
     print(username)
     password = form_data.password
     # get user from database
