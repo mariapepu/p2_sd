@@ -12,7 +12,7 @@
             </span>
           <img
             src="https://cdn.discordapp.com/attachments/907670606395375637/1121125156467777596/Money-Cash-PNG-Image-Background.png"
-            alt="Money Icon" width="25" height="25" style="margin-right: 2px;">
+            alt="Money Icon" width="24" height="24" style="margin-right: 2px;">
           <span class="spanText" style="margin-right: 13px;">
               {{ this.$route.query.username === undefined ? '- €' : this.available_money + ' €' }}
             </span>
@@ -204,6 +204,13 @@ export default {
         this.addPurchase(parameters)
       }
       alert('Compra realitzada amb exit!')
+      this.is_showing_cart = false
+      this.matches_added = []
+      this.getMatches()
+      window.location.reload()
+    },
+    reloadPage () {
+      window.location.reload()
     },
     addPurchase (parameters) {
       console.log('addPurchase achieved')
