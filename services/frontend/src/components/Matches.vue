@@ -8,7 +8,7 @@
             <span class="spanText" style="margin-right: 13px;">
               {{  this.$route.query.username === undefined ? '' : this.$route.query.username }}
             </span>
-            <img src="https://png.pngtree.com/png-vector/20191128/ourmid/pngtree-coin-money-icon-png-image_2049478.jpg" alt="Money Icon" width="25" height="25" style="margin-right: 2px;">
+            <img src="https://cdn.discordapp.com/attachments/907670606395375637/1121125156467777596/Money-Cash-PNG-Image-Background.png" alt="Money Icon" width="25" height="25" style="margin-right: 2px;">
             <span class="spanText" style="margin-right: 13px;">
               {{this.$route.query.username === undefined ? '- €' : this.available_money + ' €'}}
             </span>
