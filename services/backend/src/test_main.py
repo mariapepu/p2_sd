@@ -1,7 +1,6 @@
-import models
-from main import app, get_db
 from fastapi.testclient import TestClient
-import schemas
+
+from main import app, get_db
 from schemas import *
 
 client = TestClient(app)
@@ -84,7 +83,6 @@ def test_update_team():
     assert response.json()["description"] == team["description"]
     assert response.json()["id"]
 
-
     # Actualizar el equipo con un nombre y una descripción diferentes
     response = client.put("/team/Madrid",
                           json={"name": "Barça", "country": "Spain", "description": "Mejor que el Madrid"})
@@ -125,6 +123,7 @@ def test_create_competition():
     assert response.json()["sport"] == "football"
     assert response.json()["teams"][0]["name"] == "barça3"
 
+
 # test para leer todas las competitions
 def test_read_competitions():
     response = client.get("/competitions/")
@@ -144,8 +143,6 @@ def test_read_competition_by_id():
         "category": "professional",
         "sport": "football"
     }
-
-
 
 
 # Test para actualizar una competición
@@ -240,6 +237,7 @@ def test_create_match():
     #assert response.json()["local"] == new_match2["Espanyol_00"]
     #assert response.json()["visitor"] == new_match2["Barçaaaaa"]"""
 
+
 def test_create_match():
     # Creamos dos equipos
     local_team = {
@@ -286,7 +284,6 @@ def test_create_match():
     assert match["competition"]["name"] == "Primera division"
     assert match["local"]["name"] == "barça3"
     assert match["visitor"]["name"] == "espanyol"
-
 
 
 # Test de encontrar un match a traves de su id

@@ -21,18 +21,22 @@ Accept: application/json
 POST http://127.0.0.1:8000/teams
 Content-Type: application/json
 
-{   "name": "CSC Futsal",
-    "country": "Spain",
-    "description": "Futbol Sala Team"}
+{
+  "name": "CSC Futsal",
+  "country": "Spain",
+  "description": "Futbol Sala Team"
+}
 
 ###
 
 DELETE http://127.0.0.1:8000/teams
 Content-Type: application/json
 
-{   "name": "CSC Futsal",
-    "country": "Spain",
-    "description": "Futbol Sala Team"}
+{
+  "name": "CSC Futsal",
+  "country": "Spain",
+  "description": "Futbol Sala Team"
+}
 
 ###
 

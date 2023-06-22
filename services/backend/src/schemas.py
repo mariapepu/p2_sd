@@ -1,9 +1,11 @@
 # mport enum
-from models import sports_list, categories_list, Category, Sports
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
 from typing import List
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+from models import Category, Sports
 
 
 class TeamBase(BaseModel):

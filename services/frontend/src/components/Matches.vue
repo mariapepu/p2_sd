@@ -4,25 +4,29 @@
       <h1> {{ message }} </h1>
       <div class="header-right">
         <div class="icon-button-container">
-            <img src="https://www.citypng.com/public/uploads/small/11639594360nclmllzpmer2dvmrgsojcin90qmnuloytwrcohikyurvuyfzvhxeeaveigoiajks5w2nytyfpix678beyh4ykhgvmhkv3r3yj5hi.png" alt="Person Icon" width="24" height="24" style="margin-right: 2px;" class="mb-1">
-            <span class="spanText" style="margin-right: 13px;">
-              {{  this.$route.query.username === undefined ? '' : this.$route.query.username }}
+          <img
+            src="https://www.citypng.com/public/uploads/small/11639594360nclmllzpmer2dvmrgsojcin90qmnuloytwrcohikyurvuyfzvhxeeaveigoiajks5w2nytyfpix678beyh4ykhgvmhkv3r3yj5hi.png"
+            alt="Person Icon" width="24" height="24" style="margin-right: 2px;" class="mb-1">
+          <span class="spanText" style="margin-right: 13px;">
+              {{ this.$route.query.username === undefined ? '' : this.$route.query.username }}
             </span>
-            <img src="https://cdn.discordapp.com/attachments/907670606395375637/1121125156467777596/Money-Cash-PNG-Image-Background.png" alt="Money Icon" width="25" height="25" style="margin-right: 2px;">
-            <span class="spanText" style="margin-right: 13px;">
-              {{this.$route.query.username === undefined ? '- €' : this.available_money + ' €'}}
+          <img
+            src="https://cdn.discordapp.com/attachments/907670606395375637/1121125156467777596/Money-Cash-PNG-Image-Background.png"
+            alt="Money Icon" width="25" height="25" style="margin-right: 2px;">
+          <span class="spanText" style="margin-right: 13px;">
+              {{ this.$route.query.username === undefined ? '- €' : this.available_money + ' €' }}
             </span>
-            <button class="btn-vc header-btn" @click="is_showing_cart = !is_showing_cart">Veure cistella
-          <div class="svg-wrapper-1">
-            <div class="svg-wrapper">
-              <div v-if="is_showing_cart" class="closebox"></div>
+          <button class="btn-vc header-btn" @click="is_showing_cart = !is_showing_cart">Veure cistella
+            <div class="svg-wrapper-1">
+              <div class="svg-wrapper">
+                <div v-if="is_showing_cart" class="closebox"></div>
+              </div>
             </div>
-          </div>
-        </button>
-            <button class="btn button-secondary" @click="login">
-              {{this.$route.query.username === undefined ? 'Log In' : 'Log Out'}}
-            </button>
-          </div>
+          </button>
+          <button class="btn button-secondary btn-login" @click="login">
+            {{ this.$route.query.username === undefined ? 'Log In' : 'Log Out' }}
+          </button>
+        </div>
       </div>
     </div>
     <hr class="gradient">
@@ -78,7 +82,8 @@
             <button class="btn btn-secondary btn-group" type="button" @click="is_showing_cart = !is_showing_cart">
               Enrere
             </button>
-            <button class="btn btn-success btn-group" type="button" @click="finalizePurchase">Finalitza la compra</button>
+            <button class="btn btn-success btn-group" type="button" @click="finalizePurchase">Finalitza la compra
+            </button>
           </div>
         </div>
         <div v-else>
@@ -105,10 +110,12 @@
             </div>
             <img :src="cardImages[index]" alt="Card image" class="card-img">
             <div class="card-img-overlay card-body">
-              <h6><strong>{{ match.local.name }}</strong> ({{ match.local.country }}) vs <strong>{{ match.visitor.name }}</strong> ({{ match.visitor.country }})</h6>
-                      <h6>Data: {{ match.date.substring(0,10) }}</h6>
-                      <h6>Preu: {{ match.price }} &euro;</h6>
-                      <h6>Entrades disponibles: {{ match.total_available_tickets }}</h6>
+              <h6><strong>{{ match.local.name }}</strong> ({{ match.local.country }}) vs <strong>{{
+                  match.visitor.name
+                }}</strong> ({{ match.visitor.country }})</h6>
+              <h6>Data: {{ match.date.substring(0, 10) }}</h6>
+              <h6>Preu: {{ match.price }} &euro;</h6>
+              <h6>Entrades disponibles: {{ match.total_available_tickets }}</h6>
               <button class="btn btn-success btn-lg card-btn" v-on:click="addEventToCart(match)">Afegeix a la cistella
               </button>
             </div>
@@ -129,19 +136,17 @@ export default {
       message: 'Sport Matches',
       user: this.username,
       tickets_bought: 0,
-      // remaining_tickets: 0,
       available_money: 0,
-      // price_match: 0,
       is_showing_cart: false,
       matches_added: [],
       creatingAccount: false,
       is_admin: false,
       totalTickets: 0,
       cardImages: [
-        'https://media.istockphoto.com/id/626535710/es/foto/jugador-de-voleibol-de-la-escuela-secundaria-asi%C3%A1tica-dispara-voleibol-contra-oponentes.jpg?s=612x612&w=0&k=20&c=Zt90sNrGqg_2utf3CDdF4sddEEM2sQ76a2Vwzqt-z6I=',
         'https://5corunafs.com/web2022/wp-content/uploads/2021/01/SAVE_20210121_074852-1-768x552.jpg',
-        'https://5corunafs.com/web2022/wp-content/uploads/2021/01/SAVE_20210121_074852-1-768x552.jpg'
-        // Agrega más URLs de imágenes según sea necesario
+        'https://5corunafs.com/web2022/wp-content/uploads/2021/01/SAVE_20210121_074852-1-768x552.jpg',
+        'https://media.istockphoto.com/id/626535710/es/foto/jugador-de-voleibol-de-la-escuela-secundaria-asi%C3%A1tica-dispara-voleibol-contra-oponentes.jpg?s=612x612&w=0&k=20&c=Zt90sNrGqg_2utf3CDdF4sddEEM2sQ76a2Vwzqt-z6I='
+        // Agregar más URLs de imágenes según sea necesario
       ],
       matches: []
     }
@@ -184,14 +189,6 @@ export default {
         this.matches_added.push(eventAdded)
       }
     },
-    addEventToCart2 (match) {
-      const existingMatch = this.matches_added.find((addedMatch) => addedMatch.id === match.id)
-      if (!existingMatch) {
-        match.ticketCount = 1
-        this.totalTickets += 1
-        this.matches_added.push(match)
-      }
-    },
     deleteEvent (event) {
       this.matches_added.splice(event, 1)
     },
@@ -210,7 +207,6 @@ export default {
     },
     addPurchase (parameters) {
       console.log('addPurchase achieved')
-      // 5.5 seguretat
       const path = 'http://127.0.0.1:8000/orders/' + this.username
       /* const config = {
         headers: {
@@ -260,6 +256,17 @@ export default {
 </script>
 
 <style>
+.btn-login {
+  border-radius: 8px;
+  border-color: sandybrown;
+  border-width: medium;
+  transition-duration: .2s;
+}
+
+.btn-login:hover {
+  background-color: peachpuff;
+  border-color: peachpuff;
+}
 
 .card {
   border-radius: 15px;
@@ -274,7 +281,7 @@ export default {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 0px 0px 15px 15px;
+  border-radius: 0 0 15px 15px;
 }
 
 .card-img-overlay {
@@ -353,9 +360,9 @@ export default {
   border-width: medium;
   min-width: 150px;
   transition-duration: .3s;
-  margin-left:2%;
-  margin-top:2%;
-  margin-bottom:2%;
+  margin-left: 2%;
+  margin-top: 2%;
+  margin-bottom: 2%;
 }
 
 .header .header-btn {

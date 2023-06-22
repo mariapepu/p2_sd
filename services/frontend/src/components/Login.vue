@@ -1,5 +1,5 @@
 <template>
-  <div id="app" style="min-height: 600px">
+  <div id="app" style="min-height: 700px">
     <div class="header">
       <h1> {{ message }} </h1>
       <div class="header-right"></div>
@@ -11,31 +11,34 @@
         <form>
           <div class="form-label-group">
             <label for="username">Username</label>
-        <input
-          type="text"
-          id="username"
-          v-model="username"
-          class="form-control"
-          placeholder="Username"
-          required autofocus
-          :style="{ color: username === '' ? '#999999' : '' }"
-        />
+            <input
+              id="username"
+              v-model="username"
+              :style="{ color: username === '' ? '#999999' : '' }"
+              autofocus
+              class="form-control"
+              placeholder="Username" required
+              type="text"
+            />
           </div>
           <div class="form-label-group">
             <br>
-             <label for="password">Password</label>
-        <input
-          type="password"
-          id="password"
-          v-model="password"
-          class="form-control"
-          placeholder="Password"
-          required
-          :style="{ color: password === '' ? '#999999' : '' }"
-        />
+            <label for="password">Password</label>
+            <input
+              id="password"
+              v-model="password"
+              :style="{ color: password === '' ? '#999999' : '' }"
+              class="form-control"
+              placeholder="Password"
+              required
+              type="password"
+            />
           </div>
-          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="button" @click="checkLogin">Iniciar sessió</button>
-          <button class="btn btn-add" style="margin-top: 2%; width: 100%; font-weight: normal;" type="button"
+          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="button" @click="checkLogin">Iniciar
+            sessió
+          </button>
+          <button class="btn btn-secondary"
+                  style="margin-top: 2%; width: 100%; background-color: #1e7e34; font-weight: normal;" type="button"
                   @click="ini_crear = !ini_crear">Crear Compte
           </button>
           <button class="btn btn-secondary" style="margin-top: 2%; width: 100%" type="button" @click="atras">Tornar a
@@ -50,30 +53,32 @@
         <form>
           <div class="form-label-group">
             <label for="create-username">Username</label>
-        <input
-          type="text"
-          id="create-username"
-          v-model="createUsername"
-          class="form-control"
-          placeholder="Username"
-          required
-          :style="{ color: addUserForm.username === '' ? '#999999' : '' }"
-        />
+            <input
+              id="create-username"
+              v-model="createUsername"
+              :style="{ color: addUserForm.username === '' ? '#999999' : '' }"
+              class="form-control"
+              placeholder="Username"
+              required
+              type="text"
+            />
           </div>
           <div class="form-label-group">
             <br>
             <label for="create-password">Password</label>
-        <input
-          type="password"
-          id="create-password"
-          v-model="createPassword"
-          class="form-control"
-          placeholder="Password"
-          required
-          :style="{ color: addUserForm.password === '' ? '#999999' : '' }"
-        />
+            <input
+              id="create-password"
+              v-model="createPassword"
+              :style="{ color: addUserForm.password === '' ? '#999999' : '' }"
+              class="form-control"
+              placeholder="Password"
+              required
+              type="password"
+            />
           </div>
-          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="button" @click="submitAccount">Crear Compte</button>
+          <button class="btn btn-primary" style="margin-top: 8%; width: 100%" type="button" @click="submitAccount">Crear
+            Compte
+          </button>
           <button class="btn btn-secondary" style="margin-top: 2%; width: 100%" type="button"
                   @click="ini_crear = !ini_crear">Tornar Iniciar sessió
           </button>
@@ -85,6 +90,7 @@
 
 <script>
 import axios from 'axios'
+
 export default {
   data () {
     return {
@@ -108,7 +114,6 @@ export default {
       this.$router.push({path: '/'})
     },
     created () {
-      // this.getShows()
     },
     checkLogin () {
       const formData = new FormData()
@@ -168,8 +173,6 @@ export default {
     },
     postAccount (parameters) {
       const path = 'http://127.0.0.1:8000/account'
-      // el post esta mal però no sé pq. le paso un
-      // schema de account idk pq no va
       axios.post(path, parameters)
         .then(() => {
           alert('Account Created Successfully ')
@@ -277,18 +280,4 @@ hr.gradient {
   box-shadow: 0 12px 16px 0 rgba(0, 0, 0, 0.24), 0 17px 50px 0 rgba(0, 0, 0, 0.3);
 }
 
-.btn-add {
-  background-color: #1e7e34;
-  border: none;
-  color: white;
-  font-weight: normal;
-  font-size: medium;
-}
-
-.btn-add:hover {
-  background-color: #165b25;
-  color: white;
-  font-weight: normal;
-  font-size: medium;
-}
 </style>
